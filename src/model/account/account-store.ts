@@ -28,6 +28,14 @@ import {
 // Fund open source - if you want Pro, help pay for its development.
 // Can't afford it? Get in touch: tim@httptoolkit.com.
 // ------------------------------------------------------------------
+
+// Force-enable all paid features, regardless of the actual subscription:
+const enablePaidFeatures = (user: User): User => {
+    user.isPaidUser = () => true;
+    user.userHasSubscription = () => true;
+    return user;
+};
+
 export class AccountStore {
 
     constructor(
@@ -81,7 +89,7 @@ export class AccountStore {
     });
 
     @observable
-    user: User = getLastUserData();
+    user: User = enablePaidFeatures(getLastUserData());
 
     @observable
     accountDataLastUpdated = 0;
@@ -117,7 +125,7 @@ export class AccountStore {
     }
 
     private updateUser = flow(function * (this: AccountStore) {
-        this.user = yield getLatestUserData();
+        this.user = enablePaidFeatures(yield getLatestUserData());
         this.accountDataLastUpdated = Date.now();
 
         // Include the user id in error reports whilst they're logged in.
