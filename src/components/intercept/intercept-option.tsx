@@ -3,7 +3,7 @@ import * as React from 'react';
 import { action, observable } from 'mobx';
 import { observer, inject } from 'mobx-react';
 
-import { NARROW_LAYOUT_BREAKPOINT, styled } from '../../styles';
+import { NARROW_LAYOUT_BREAKPOINT, styled, popColor } from '../../styles';
 import { Icon } from '../../icons';
 import { trackEvent } from '../../metrics';
 import { logError } from '../../errors';
@@ -146,7 +146,8 @@ const LoadingOverlay = styled.div`
 
 export const StatusPill = styled(Pill)`
     white-space: normal; /* Useful for layout in tiny screens, e.g. the 'proxy port' badge */
-    && { margin: auto 0 0 0; }
+
+    margin-top: auto;
 `;
 
 function getStatusPill(interceptor: Interceptor) {
@@ -167,7 +168,7 @@ function getStatusPill(interceptor: Interceptor) {
                 }
             </StatusPill>;
         } else {
-            return <StatusPill color='#e1421f'>
+            return <StatusPill color={popColor}>
                 Coming soon
             </StatusPill>;
         }

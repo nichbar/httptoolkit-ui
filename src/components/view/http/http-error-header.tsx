@@ -4,9 +4,13 @@ import * as semver from 'semver';
 import { WarningIcon } from '../../../icons';
 import { logError } from '../../../errors';
 
-import { desktopVersion, versionSatisfies, DESKTOP_HEADER_LIMIT_CONFIGURABLE } from '../../../services/service-versions';
+import {
+    desktopVersion,
+    versionSatisfies,
+    DESKTOP_HEADER_LIMIT_CONFIGURABLE
+} from '../../../services/service-versions';
 
-import { UnreachableCheck } from '../../../util/error';
+import { unreachableCheck } from '../../../util/error';
 import { clickOnEnter } from '../../component-utils';
 import {
     HeaderCard,
@@ -217,7 +221,7 @@ export const HttpErrorHeader = (p: {
                             ? 'headers were too large to be processed'
                         : p.type === 'client-unparseable'
                             ? 'could not be parsed'
-                        : new UnreachableCheck(p.type)
+                        : unreachableCheck(p.type)
                     }, so HTTP Toolkit did not handle this request.
                 </>
             : wasNotForwarded(p.type)
@@ -239,7 +243,7 @@ export const HttpErrorHeader = (p: {
                             ? 'hostname could be not found'
                         : p.type === 'connection-refused'
                             ? 'refused the connection'
-                        : new UnreachableCheck(p.type)
+                        : unreachableCheck(p.type)
                     }, so HTTP Toolkit did not forward the request.
                 </>
             : wasTimeout(p.type)
@@ -249,7 +253,7 @@ export const HttpErrorHeader = (p: {
                             ? 'waiting for the client to send the complete request'
                         : p.type === 'server-timeout'
                             ? 'waiting for a response from the server'
-                        : new UnreachableCheck(p.type)
+                        : unreachableCheck(p.type)
                     }
                 </>
             : p.type === 'client-abort'
@@ -264,7 +268,7 @@ export const HttpErrorHeader = (p: {
                             ? 'the connection to the server was reset'
                         : p.type === 'server-unparseable'
                             ? 'the response from the server was unparseable'
-                        : new UnreachableCheck(p.type)
+                        : unreachableCheck(p.type)
                     }, so HTTP Toolkit could not return a response to the client.
                 </>
             : p.type === 'unknown'
@@ -272,7 +276,7 @@ export const HttpErrorHeader = (p: {
                     The request failed because of an unknown error,
                     so HTTP Toolkit could not return a response.
                 </>
-            : new UnreachableCheck(p.type)
+            : unreachableCheck(p.type)
         }
         </HeaderText>
 
@@ -353,33 +357,31 @@ export const HttpErrorHeader = (p: {
             </HeaderText>
         : p.type === 'connection-refused'
             ? <HeaderText>
-                This typically means the server isn't running right now on the port you're using,
-                although it's possible this is an intermittent connection issue. You can either
-                try again, or you can mock requests like this to avoid sending them upstream
-                at all.
+                This typically means the server isn't running on the port you're using, though
+                it is possible this is an intermittent connection issue. You can either try
+                again, or mock requests like this to avoid sending them upstream at all.
             </HeaderText>
         : p.type === 'connection-reset'
             ? <HeaderText>
-                This could be due to a connection issue, or may be caused by an issue on the server.
-                In many cases, this is an intermittent issue that will be solved by retrying
-                the request. You can also mock requests like this, to avoid sending them upstream
-                at all.
+                This could be due to a connection issue, or an issue with the server.
+                This may be an intermittent issue that will be solved by retrying the request, or
+                you can mock requests like this to avoid sending them upstream at all.
             </HeaderText>
         : p.type === 'client-abort'
             ? <HeaderText>
-                This could be due to connection issues, general problems in the client, or that
+                This could be due to connection issues, problems within the client, or that
                 the client simply no longer wanted to receive the response and closed the
                 connection intentionally.
             </HeaderText>
         : p.type === 'client-timeout'
             ? <HeaderText>
-                This could be due to connection issues, general problems in the client, or delays
+                This could be due to connection issues, problems within the client, or delays
                 generating the complete body of the request. This might be resolved by retrying
                 the request, or sending a simpler request with a smaller or easier to generate body.
             </HeaderText>
         : p.type === 'server-timeout'
             ? <HeaderText>
-                This could be due to connection issues, general issues on the server, or issues
+                This could be due to connection issues, problems within the server, or issues
                 with handling this request specifically. This might be resolved by retrying
                 the request, or you can mock requests like this to avoid sending them upstream
                 at all.
@@ -444,7 +446,7 @@ export const HttpErrorHeader = (p: {
                 This might be an intermittent issue, and may be resolved by retrying
                 the request.
             </HeaderText>
-        : new UnreachableCheck(p.type)}
+        : unreachableCheck(p.type)}
 
         { isInitialRequestError(p.type) && <HeaderText>
             The data shown below is a best guess from the data that was available

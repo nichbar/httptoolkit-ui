@@ -40,21 +40,34 @@ import type { RTCMediaTrack } from './model/webrtc/rtc-media-track';
 import type { TrafficSource } from './model/http/sources';
 import type { ViewableContentType } from './model/events/content-types';
 
+// These are the HAR types as returned from parseHar(), not the raw types as defined in the HAR itself
 export type HarBody = { encodedLength: number, decoded: Buffer };
 export type HarRequest = Omit<MockttpCompletedRequest, 'body' | 'timingEvents' | 'matchedRuleId'> &
     { body: HarBody; timingEvents: TimingEvents, matchedRuleId: false };
 export type HarResponse = Omit<MockttpResponse, 'body' | 'timingEvents'> &
     { body: HarBody; timingEvents: TimingEvents };
 
+export type SentRequest = Omit<MockttpInitiatedRequest, 'matchedRuleId' | 'body'> &
+    { matchedRuleId: false, body: { buffer: Buffer } };
+export type SentRequestResponse = Omit<MockttpResponse, 'body'> &
+    { body: { buffer: Buffer } };
+export type SentRequestError = Pick<MockttpAbortedRequest, 'id' | 'timingEvents' | 'tags'> & {
+    error: {
+        code?: string;
+        message?: string;
+        stack?: string;
+    };
+}
+
 export type InputHTTPEvent = MockttpEvent;
 export type InputClientError = ClientError;
 export type InputTlsFailure = TlsHandshakeFailure;
 export type InputTlsPassthrough = TlsPassthroughEvent;
 export type InputInitiatedRequest = MockttpInitiatedRequest | HarRequest;
-export type InputCompletedRequest = MockttpCompletedRequest | HarRequest;
+export type InputCompletedRequest = MockttpCompletedRequest | HarRequest | SentRequest;
 export type InputRequest = InputInitiatedRequest | InputCompletedRequest;
-export type InputFailedRequest = MockttpAbortedRequest | ClientError['request'];
-export type InputResponse = MockttpResponse | HarResponse;
+export type InputFailedRequest = MockttpAbortedRequest | ClientError['request'] | SentRequestError;
+export type InputResponse = MockttpResponse | HarResponse | SentRequestResponse;
 export type InputMessage = InputRequest | InputResponse;
 
 export type InputWebSocketMessage = MockttpWebSocketMessage;

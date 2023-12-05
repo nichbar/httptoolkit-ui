@@ -8,7 +8,7 @@ import { PrecacheController } from 'workbox-precaching'
 import { ExpirationPlugin } from 'workbox-expiration';
 import { StaleWhileRevalidate, NetworkOnly } from 'workbox-strategies';
 
-import * as appPackage from '../../package.json';
+import packageMetadata from '../../package.json';
 import { getServerVersion } from './server-api';
 import { lastServerVersion, versionSatisfies } from './service-versions';
 import { delay } from '../util/promise';
@@ -56,6 +56,9 @@ const __precacheManifest = self.__WB_MANIFEST; // This is injected by webpack's 
 
 function getPrecacheController() {
     const controller = new PrecacheController();
+    // Errors will appear here if running from 'localhost' in dev mode - that's fine, we
+    // don't inject this in dev mode, nothing to worry about. If you want to test this, use
+    // a prod build instead (npm run start:prod)
     controller.addToCacheList(__precacheManifest);
     return controller;
 }
@@ -104,10 +107,10 @@ async function checkServerVersion() {
 
     console.log(`Connected httptoolkit-server version is ${serverVersion}.`);
     console.log(`App requires server version satisfying ${
-        appPackage.runtimeDependencies['httptoolkit-server']
+        packageMetadata.runtimeDependencies['httptoolkit-server']
     }.`);
 
-    if (!versionSatisfies(serverVersion, appPackage.runtimeDependencies['httptoolkit-server'])) {
+    if (!versionSatisfies(serverVersion, packageMetadata.runtimeDependencies['httptoolkit-server'])) {
         throw new Error(
             `New app version ${appVersion} available, but server ${
                 await serverVersion

@@ -8,7 +8,7 @@ import { CollectedEvent, HtkResponse, HttpExchange } from '../../../types';
 import { styled } from '../../../styles';
 import { logError } from '../../../errors';
 
-import { UiStore } from '../../../model/ui-store';
+import { ExpandableViewCardKey, UiStore } from '../../../model/ui/ui-store';
 import { RulesStore } from '../../../model/rules/rules-store';
 import { AccountStore } from '../../../model/account/account-store';
 import { ApiExchange } from '../../../model/api/api-interfaces';
@@ -17,11 +17,7 @@ import { findItem } from '../../../model/rules/rules-structure';
 import { HtkMockRule, getRulePartKey } from '../../../model/rules/rules';
 import { WebSocketStream } from '../../../model/websockets/websocket-stream';
 
-import {
-    PaneOuterContainer,
-    PaneScrollContainer,
-    ExpandedPaneContentContainer
-} from '../view-details-pane';
+import { PaneOuterContainer, PaneScrollContainer } from '../view-details-pane';
 import { StreamMessageListCard } from '../stream-message-list-card';
 import { WebSocketCloseCard } from '../websocket-close-card';
 
@@ -32,7 +28,7 @@ import { HttpResponseCard } from './http-response-card';
 import { HttpAbortedResponseCard } from './http-aborted-card';
 import { HttpPerformanceCard } from './http-performance-card';
 import { HttpExportCard } from './http-export-card';
-import { ThemedSelfSizedEditor } from '../../editor/base-editor';
+import { SelfSizedEditor } from '../../editor/base-editor';
 import { HttpErrorHeader, tagsToErrorType } from './http-error-header';
 import { HttpDetailsFooter } from './http-details-footer';
 import { HttpRequestBreakpointHeader, HttpResponseBreakpointHeader } from './http-breakpoint-header';
@@ -64,13 +60,14 @@ const makeFriendlyApiName = (rawName: string) => {
 export class HttpDetailsPane extends React.Component<{
     exchange: HttpExchange,
 
-    requestEditor: portals.HtmlPortalNode<typeof ThemedSelfSizedEditor>,
-    responseEditor: portals.HtmlPortalNode<typeof ThemedSelfSizedEditor>,
-    streamMessageEditor: portals.HtmlPortalNode<typeof ThemedSelfSizedEditor>,
+    requestEditor: portals.HtmlPortalNode<typeof SelfSizedEditor>,
+    responseEditor: portals.HtmlPortalNode<typeof SelfSizedEditor>,
+    streamMessageEditor: portals.HtmlPortalNode<typeof SelfSizedEditor>,
 
     navigate: (path: string) => void,
     onDelete: (event: CollectedEvent) => void,
     onScrollToEvent: (event: CollectedEvent) => void,
+    onBuildRuleFromExchange: (exchange: HttpExchange) => void,
 
     // Injected:
     uiStore?: UiStore,
@@ -87,16 +84,14 @@ export class HttpDetailsPane extends React.Component<{
             exchange,
             onDelete,
             onScrollToEvent,
+            onBuildRuleFromExchange,
             uiStore,
             accountStore,
             navigate
         } = this.props;
 
         const { isPaidUser } = accountStore!;
-        const {
-            expandedCard,
-            expandCompleted
-        } = uiStore!;
+        const { expandedViewCard } = uiStore!;
         const { requestBreakpoint, responseBreakpoint } = exchange;
 
         // The full API details - for paid APIs, and non-paid users, we don't show
@@ -115,11 +110,11 @@ export class HttpDetailsPane extends React.Component<{
 
         const headerCard = this.renderHeaderCard(exchange);
 
-        if (expandedCard) {
-            return <ExpandedPaneContentContainer expandCompleted={expandCompleted}>
+        if (expandedViewCard) {
+            return <PaneOuterContainer>
                 { headerCard }
-                { this.renderExpandedCard(expandedCard, exchange, apiExchange) }
-            </ExpandedPaneContentContainer>;
+                { this.renderExpandedCard(expandedViewCard, exchange, apiExchange) }
+            </PaneOuterContainer>;
         }
 
         const cards = (requestBreakpoint || responseBreakpoint)
@@ -135,6 +130,7 @@ export class HttpDetailsPane extends React.Component<{
                 event={exchange}
                 onDelete={onDelete}
                 onScrollToEvent={onScrollToEvent}
+                onBuildRuleFromExchange={onBuildRuleFromExchange}
                 navigate={navigate}
                 isPaidUser={isPaidUser}
             />
@@ -210,7 +206,7 @@ export class HttpDetailsPane extends React.Component<{
     }
 
     private renderExpandedCard(
-        expandedCard: 'requestBody' | 'responseBody' | 'webSocketMessages',
+        expandedCard: ExpandableViewCardKey,
         exchange: HttpExchange,
         apiExchange: ApiExchange | undefined
     ) {
