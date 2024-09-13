@@ -20,7 +20,7 @@ import {
     fakeBuffer,
     FakeBuffer,
     stringToBuffer,
-} from '../../util';
+} from '../../util/buffer';
 import { UnreachableCheck } from '../../util/error';
 import { lazyObservablePromise, ObservablePromise, observablePromise } from "../../util/observable";
 import {
@@ -34,7 +34,7 @@ import { MANUALLY_SENT_SOURCE, parseSource } from './sources';
 import { getContentType } from '../events/content-types';
 import { HTKEventBase } from '../events/event-base';
 
-import { HandlerClassKey, HtkMockRule, getRulePartKey } from '../rules/rules';
+import { HandlerClassKey, HtkRule, getRulePartKey } from '../rules/rules';
 
 import { ApiStore } from '../api/api-store';
 import { ApiExchange } from '../api/api-interfaces';
@@ -211,6 +211,7 @@ export class HttpExchange extends HTKEventBase {
                 this.request.parsedUrl.search
         ]
         .concat(..._.map(this.request.headers, (value, key) => `${key}: ${value}`))
+        .concat(..._.map(this.request.trailers, (value, key) => `${key}: ${value}`))
         .concat(this.request.method)
         .join('\n')
         .toLowerCase();
@@ -228,6 +229,9 @@ export class HttpExchange extends HTKEventBase {
 
     @observable
     public tags: string[];
+
+    @observable
+    public hideErrors = false; // Set to true when errors are ignored for an exchange
 
     @computed
     get httpVersion() {
@@ -268,7 +272,7 @@ export class HttpExchange extends HTKEventBase {
     @observable
     public abortMessage: string | undefined;
 
-    updateFromCompletedRequest(request: InputCompletedRequest, matchedRule: HtkMockRule | false) {
+    updateFromCompletedRequest(request: InputCompletedRequest, matchedRule: HtkRule | false) {
         if (request.body instanceof HttpBody) {
             // If this request was used in new HttpExchange, it's mutated in some ways, and this
             // will cause problems. Shouldn't happen, but we check against it here just in case:
@@ -329,7 +333,8 @@ export class HttpExchange extends HTKEventBase {
             this.searchIndex,
             response.statusCode.toString(),
             response.statusMessage.toString(),
-            ..._.map(response.headers, (value, key) => `${key}: ${value}`)
+            ..._.map(response.headers, (value, key) => `${key}: ${value}`),
+            ..._.map(response.trailers, (value, key) => `${key}: ${value}`)
         ].join('\n').toLowerCase();
 
         // Wrap the API promise to also add this response data (but lazily)

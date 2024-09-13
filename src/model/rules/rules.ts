@@ -1,7 +1,6 @@
 import * as _ from 'lodash';
 import {
-    serverVersion as serverVersionObservable,
-    versionSatisfies,
+    serverSupports,
     BODY_MATCHING_RANGE,
     HOST_MATCHER_SERVER_RANGE,
     FROM_FILE_HANDLER_SERVER_RANGE,
@@ -22,14 +21,14 @@ import {
     TransformingHandler,
     HttpMatcherLookup,
     HttpHandlerLookup,
-    HttpMockRule,
+    HttpRule,
     HttpInitialMatcherClasses
 } from './definitions/http-rule-definitions';
 
 import {
     WebSocketMatcherLookup,
     WebSocketHandlerLookup,
-    WebSocketMockRule,
+    WebSocketRule,
     WebSocketInitialMatcherClasses,
     EchoWebSocketHandlerDefinition,
     RejectWebSocketHandlerDefinition,
@@ -40,12 +39,12 @@ import {
     EthereumMatcherLookup,
     EthereumHandlerLookup,
     EthereumInitialMatcherClasses,
-    EthereumMockRule,
+    EthereumRule,
     EthereumMethodMatcher
 } from './definitions/ethereum-rule-definitions';
 
 import {
-    IpfsMockRule,
+    IpfsRule,
     IpfsMatcherLookup,
     IpfsInitialMatcherClasses,
     IpfsHandlerLookup,
@@ -55,7 +54,7 @@ import {
 import {
     RTCMatcherLookup,
     RTCStepLookup,
-    RTCMockRule,
+    RTCRule,
     RTCInitialMatcherClasses
 } from './definitions/rtc-rule-definitions';
 
@@ -93,16 +92,6 @@ const PartVersionRequirements: {
     'ws-reject': WEBSOCKET_MESSAGING_RULES_SUPPORTED,
     'reset-connection': CONNECTION_RESET_SUPPORTED
 };
-
-const serverSupports = (versionRequirement: string | undefined) => {
-    if (!versionRequirement || versionRequirement === '*') return true;
-
-    // If we haven't got the server version yet, assume it doesn't support this
-    if (serverVersionObservable.state !== 'fulfilled') return false;
-
-    const version = serverVersionObservable.value as string; // Fulfilled -> string value
-    return versionSatisfies(version, versionRequirement);
-}
 
 /// --- Matchers ---
 
@@ -264,6 +253,7 @@ const HiddenMatchers = [
     'default-ws-wildcard',
     'multipart-form-data',
     'raw-body-regexp',
+    'regex-url',
     'hostname',
     'port',
     'protocol',
@@ -434,17 +424,17 @@ export const isPaidHandlerClass = (
 
 /// --- Rules ---
 
-export type HtkMockRule = (
-    | HttpMockRule
-    | WebSocketMockRule
-    | EthereumMockRule
-    | IpfsMockRule
-    | RTCMockRule
+export type HtkRule = (
+    | HttpRule
+    | WebSocketRule
+    | EthereumRule
+    | IpfsRule
+    | RTCRule
 ) & {
     title?: string;
 };
 
-export type RuleType = HtkMockRule['type'];
+export type RuleType = HtkRule['type'];
 
 const matchRuleType = <T extends RuleType>(
     ...types: T[]
@@ -453,7 +443,7 @@ const matchRuleType = <T extends RuleType>(
 
 const matchRule = <T extends RuleType>(
     matcher: (type: string) => type is T
-) => (rule: HtkMockRule): rule is HtkMockRule & { type: T } =>
+) => (rule: HtkRule): rule is HtkRule & { type: T } =>
     matcher(rule.type);
 
 export const isHttpCompatibleType = matchRuleType('http', 'ethereum', 'ipfs');
@@ -462,3 +452,9 @@ export const isWebSocketRule = matchRule(matchRuleType('websocket'));
 export const isRTCRule = matchRule(matchRuleType('webrtc'));
 
 export const isStepPoweredRule = isRTCRule;
+
+export enum RulePriority {
+    FALLBACK = 0,
+    DEFAULT = 1,
+    OVERRIDE = 2
+}

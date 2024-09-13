@@ -3,153 +3,217 @@ import * as polished from 'polished';
 import type { ThemeProps } from 'styled-components';
 import type * as monacoTypes from 'monaco-editor';
 
+import "@fontsource/dm-sans";
+import "@fontsource/dm-mono";
+import "@fontsource/saira";
+
 import reset from 'styled-reset';
 
 const fontSizes = {
     textInputFontSize: '13px',
-    textSize: '15px',
-    subHeadingSize: '18px',
+    textSize: '14.5px',
+    subHeadingSize: '17px',
     headingSize: '20px',
     largeHeadingSize: '24px',
     loudHeadingSize: '38px',
+    screamingHeadingSize: '80px'
 };
 import "react-contexify/dist/ReactContexify.css";
 
 export const NARROW_LAYOUT_BREAKPOINT = 1100;
 
 export const warningColor = '#f1971f';
+const warningBackground = '#f1971f40';
 export const popColor = '#e1421f';
 
-export const lightTheme = {
-    fontFamily: 'Lato, Arial, sans-serif',
-    monoFontFamily: "'Fira Mono', monospace",
+const black = "#000000";
+const inkBlack = "#16181e";
+const inkGrey = "#1e2028";
+const darkerGrey = "#25262e";
+const darkGrey = "#32343B";
+const darkishGrey =  "#53565e";
+const mediumGrey = "#818490";
+const lightGrey = "#9a9da8";
+const ghostGrey = "#e4e8ed";
+const greyWhite = "#f2f2f2";
+const almostWhite = "#fafafa";
+const white = "#ffffff";
 
-    mainBackground: '#fafafa',
-    mainLowlightBackground: '#eaeaea',
-    mainColor: '#222',
+const darkerBlue = "#2d4cbd";
+const lighterBlue = "#6284fa";
+
+const globalMonacoOverrides = {
+    'editorWarning.foreground': '#ff0000'
+};
+
+export const lightTheme = {
+    fontFamily: '"DM Sans", Arial, sans-serif',
+    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    monoFontFamily: '"DM Mono", monospace',
+
+    mainBackground: almostWhite,
+    mainLowlightBackground: greyWhite,
+    mainColor: inkGrey,
+
+    highlightBackground: white,
+    highlightColor: inkGrey,
 
     lowlightTextOpacity: 0.65,
-    pillContrast: 0.8,
+    boxShadowAlpha: 0.3,
 
-    primaryInputBackground: '#1076b9',
-    primaryInputColor: '#fafafa',
+    pillContrast: 0.9,
+    pillDefaultColor: lightGrey,
 
-    secondaryInputBorder: '#7ab2e2',
-    secondaryInputColor: '#1665af',
+    primaryInputBackground: darkerBlue,
+    primaryInputColor: white,
 
-    textInputBackground: '#fafafa',
-    textInputColor: '#222222',
+    secondaryInputBorder: lighterBlue,
+    secondaryInputColor: darkerBlue,
 
-    highlightBackground: '#ffffff',
-    highlightColor: '#222',
+    inputBackground: white,
+    inputHoverBackground: greyWhite,
+    inputBorder: darkishGrey,
+    inputColor: inkGrey,
+    inputPlaceholderColor: darkishGrey,
+    inputWarningPlaceholder: '#8c5c1d', // Mix of warning + inkGrey
 
     popColor,
 
     warningColor,
-    warningBackground: '#f1971f40',
+    warningBackground,
 
-    containerBackground: '#d8e2e6',
-    containerWatermark: '#a0afaf',
-    containerBorder: '#888',
+    containerBackground: ghostGrey,
+    containerWatermark: mediumGrey,
+    containerBorder: lightGrey,
 
     // These are the same as the standard defaults
     linkColor: '#0000EE',
     visitedLinkColor: '#551A8B',
 
     monacoTheme: 'vs-custom',
+    monacoThemeBase: 'vs',
+    monacoThemeOverrides: globalMonacoOverrides,
 
     modalGradient: 'radial-gradient(#40404b, #111118)',
 
     ...fontSizes,
 
     globalCss: ''
-};
+} as const;
 
 export const darkTheme = {
-    fontFamily: 'Lato, Arial, sans-serif',
-    monoFontFamily: "'Fira Mono', monospace",
+    fontFamily: '"DM Sans", Arial, sans-serif',
+    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    monoFontFamily: '"DM Mono", monospace',
 
-    mainBackground: '#222222',
-    mainLowlightBackground: '#303030',
-    mainColor: '#efefef',
+    mainBackground: darkGrey,
+    mainLowlightBackground: darkerGrey,
+    mainColor: white,
 
-    lowlightTextOpacity: 0.6,
-    pillContrast: 0.8,
+    highlightBackground: darkishGrey,
+    highlightColor: white,
 
-    primaryInputBackground: '#0868c1',
-    primaryInputColor: '#fafafa',
+    lowlightTextOpacity: 0.65,
+    boxShadowAlpha: 0.4,
 
-    secondaryInputBorder: '#1b5b96',
-    secondaryInputColor: '#6babe6',
+    pillContrast: 0.85,
+    pillDefaultColor: lightGrey,
 
-    textInputBackground: '#fafafa',
-    textInputColor: '#222222',
+    primaryInputBackground: darkerBlue,
+    primaryInputColor: white,
 
-    highlightBackground: '#111111',
-    highlightColor: '#efefef',
+    secondaryInputBorder: darkerBlue,
+    secondaryInputColor: lighterBlue,
+
+    inputBackground: inkBlack,
+    inputHoverBackground: inkGrey,
+    inputBorder: darkishGrey,
+    inputColor: white,
+    inputPlaceholderColor: mediumGrey,
+    inputWarningPlaceholder: '#e8b978', // Mix of warning + white
 
     popColor,
 
     warningColor,
-    warningBackground: '#f1971f40',
-
-    containerBackground: '#3c3c41',
-    containerWatermark: '#757580',
-    containerBorder: '#000000',
+    warningBackground,
+    containerBackground: inkGrey,
+    containerWatermark: lightGrey,
+    containerBorder: black,
 
     linkColor: '#8699ff',
     visitedLinkColor: '#ac7ada',
 
     monacoTheme: 'vs-dark-custom',
+    monacoThemeBase: 'vs-dark',
+    monacoThemeOverrides: {
+        ...globalMonacoOverrides,
+        'editor.background': inkBlack // Same as input background - darker for more contrast vs containerBg
+    },
 
-    modalGradient: 'radial-gradient(#ffffff,#9c9c9c)',
+    modalGradient: `radial-gradient(${white}, ${lightGrey})`,
 
     ...fontSizes,
 
     /* In dark theme, we need to override the scrollbars or they stick out like a sore thumb */
     globalCss: styledComponents.css`
-        ::-webkit-scrollbar {
-            background-color: ${p => polished.darken(0.2, p.theme.containerBackground)};
+        @supports (color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+            }
         }
 
-        ::-webkit-scrollbar-thumb {
-            background-color: ${p => polished.lighten(0.2, p.theme.containerBackground)};
-        }
+        @supports not (color-scheme: dark) {
+            ::-webkit-scrollbar {
+                background-color: ${p => polished.darken(0.2, p.theme.containerBackground)};
+            }
 
-        /* Standard, but poorly supported: */
-        scrollbar-color: dark;
+            ::-webkit-scrollbar-thumb {
+                background-color: ${p => polished.lighten(0.2, p.theme.containerBackground)};
+            }
+
+            /* Standard, but poorly supported: */
+            scrollbar-color: dark;
+        }
     `
-};
+} as const;
 
 export const highContrastTheme = {
-    fontFamily: 'Lato, Arial, sans-serif',
-    monoFontFamily: "'Fira Mono', monospace",
+    fontFamily: '"DM Sans", Arial, sans-serif',
+    titleTextFamily: 'Saira, "DM Sans", Arial, sans-serif',
+    monoFontFamily: '"DM Mono", monospace',
 
     mainBackground: '#000000',
     mainLowlightBackground: '#262626',
     mainColor: '#ffffff',
 
-    lowlightTextOpacity: 0.8,
-    pillContrast: 0.95,
+    highlightBackground: '#ffffff',
+    highlightColor: '#000',
 
-    primaryInputBackground: '#0868c1',
+    lowlightTextOpacity: 0.8,
+    boxShadowAlpha: 0.1,
+
+    pillContrast: 0.95,
+    pillDefaultColor: mediumGrey,
+
+    primaryInputBackground: darkerBlue,
     primaryInputColor: '#ffffff',
 
     secondaryInputBorder: '#ffffff',
     secondaryInputColor: '#ffffff',
 
-    textInputBackground: '#ffffff',
-    textInputColor: '#000000',
-
-    highlightBackground: '#ffffff',
-    highlightColor: '#000',
+    inputBackground: '#ffffff',
+    inputHoverBackground: '#ddd',
+    inputBorder: '#aaa',
+    inputColor: '#000000',
+    inputPlaceholderColor: '#444',
+    inputWarningPlaceholder: '#e1b374', // Mix of warning + white
 
     popColor,
 
     warningColor,
-    warningBackground: '#f1971f40',
+    warningBackground,
 
-    containerBackground: '#404045',
+    containerBackground: darkGrey,
     containerWatermark: '#a0a0b0',
     containerBorder: '#000000',
 
@@ -157,13 +221,15 @@ export const highContrastTheme = {
     visitedLinkColor: '#ac7ada',
 
     monacoTheme: 'hc-black-custom',
+    monacoThemeBase: 'hc-black',
+    monacoThemeOverrides: globalMonacoOverrides,
 
-    modalGradient: '#c0c0c0',
+    modalGradient: '#f0f0f0',
 
     ...fontSizes,
 
     globalCss: ``
-};
+} as const;
 
 export const Themes = {
     'light': lightTheme,
@@ -174,19 +240,13 @@ export const Themes = {
 export type ThemeName = keyof typeof Themes;
 export type Theme = typeof Themes[ThemeName];
 
-const monacoColorOverrides = {
-    'editorWarning.foreground': '#ff0000',
-};
-
-const monacoThemes = ['vs', 'vs-dark', 'hc-black'] as const;
-
 export function defineMonacoThemes(monaco: typeof monacoTypes) {
-    monacoThemes.forEach((themeName) => {
-        monaco.editor.defineTheme(`${themeName}-custom`, {
-            base: themeName,
+    Object.values(Themes).forEach((theme) => {
+        monaco.editor.defineTheme(theme.monacoTheme, {
+            base: theme.monacoThemeBase,
             inherit: true,
             rules: [],
-            colors: monacoColorOverrides
+            colors: theme.monacoThemeOverrides
         });
     });
 }
@@ -197,6 +257,7 @@ const {
     createGlobalStyle,
     keyframes,
     ThemeProvider,
+    StyleSheetManager
 } = styledComponents as unknown as styledComponents.ThemedStyledComponentsModule<Theme>;
 
 export {
@@ -205,7 +266,8 @@ export {
     createGlobalStyle,
     keyframes,
     ThemeProvider,
-    ThemeProps
+    type ThemeProps,
+    StyleSheetManager
 };
 
 export const GlobalStyles = createGlobalStyle`
@@ -246,7 +308,7 @@ export const GlobalStyles = createGlobalStyle`
         }
 
         .auth0-lock-widget {
-            box-shadow: 0 2px 10px 0 rgba(0,0,0,0.2) !important;
+            box-shadow: 0 2px 10px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha}) !important;
             overflow: visible !important;
         }
 
@@ -267,6 +329,11 @@ export const GlobalStyles = createGlobalStyle`
         .zone-widget .filename {
             display: none;
         }
+    }
+
+    .phosphor-icon {
+        /* Ensures icons line up with FontAwesome & neighbouring text */
+        vertical-align: -0.125em;
     }
 
     ${p => p.theme.globalCss}

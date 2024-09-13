@@ -1,11 +1,12 @@
 import * as _ from 'lodash';
 import * as React from 'react';
+import { observer } from 'mobx-react';
 
 import { Headers, RawHeaders } from '../../types';
-import { styled } from '../../styles';
+import { styled, css } from '../../styles';
 import { WarningIcon } from '../../icons';
 
-import { getHeaderValue } from '../../util/headers';
+import { asHeaderArray, getHeaderValue, getHeaderValues } from '../../util/headers';
 import { saveFile } from '../../util/ui';
 import { ErrorLike } from '../../util/error';
 
@@ -14,7 +15,8 @@ import {
     ViewableContentType,
     getContentEditorName
 } from '../../model/events/content-types';
-import { getReadableSize } from '../../model/events/bodies';
+import { getReadableSize } from '../../util/buffer';
+import { EditableBody } from '../../model/http/editable-body';
 
 import { CollapsibleCardHeading, ExpandState } from '../common/card';
 import { CollapsingButtons } from '../common/collapsing-buttons';
@@ -29,9 +31,20 @@ import { FormatButton } from '../common/format-button';
 // HTTP, but not always) but exported individually so they can be recombined & tweaked
 // in slightly different ways in each case.
 
-export const EditorCardContent = styled.div`
+export const EditorCardContent = styled.div<{ showFullBorder: boolean }>`
     margin: 0 -20px -20px -20px;
-    border-top: solid 1px ${p => p.theme.containerBorder};
+
+    ${p => p.showFullBorder
+        ? css`
+            border: solid 1px ${p => p.theme.containerBorder};
+            padding-right: 1px; /* Seemingly required to show right border */
+            border-radius: 0 0 3px 3px;
+        `
+        : css`
+            border-top: solid 1px ${p => p.theme.containerBorder};
+        `
+    }
+
     background-color: ${p => p.theme.highlightBackground};
     color: ${p => p.theme.highlightColor};
 
@@ -47,10 +60,6 @@ export const EditorCardContent = styled.div`
     scrollable URL param content
     */
     min-height: 0;
-`;
-
-export const ContainerSizedEditorCardContent = styled(EditorCardContent)`
-    flex-shrink: 1;
 `;
 
 export function getBodyDownloadFilename(url: string, headers: Headers | RawHeaders): string | undefined {
@@ -85,29 +94,29 @@ export const ReadonlyBodyCardHeader = (props: {
     const { body } = props;
 
     return <>
-        { body && /* Body may be undefined during decoding */ <>
-            <CollapsingButtons>
-                <ExpandShrinkButton
-                    expanded={props.expanded}
-                    onClick={props.onExpandToggled}
-                />
-                <IconButton
-                    icon={['fas', 'download']}
-                    title={
-                        props.isPaidUser
-                            ? "Save this body as a file"
-                            : "With Pro: Save this body as a file"
-                    }
-                    disabled={!props.isPaidUser}
-                    onClick={() => saveFile(
-                        props.downloadFilename || "",
-                        props.mimeType || 'application/octet-stream',
-                        body
-                    )}
-                />
-            </CollapsingButtons>
+        <CollapsingButtons>
+            <ExpandShrinkButton
+                expanded={props.expanded}
+                onClick={props.onExpandToggled}
+            />
+            <IconButton
+                icon={['fas', 'download']}
+                title={
+                    props.isPaidUser
+                        ? "Save this body as a file"
+                        : "With Pro: Save this body as a file"
+                }
+                disabled={!props.isPaidUser || !body}
+                onClick={() => saveFile(
+                    props.downloadFilename || "",
+                    props.mimeType || 'application/octet-stream',
+                    body! // Checked in disabled state above
+                )}
+            />
+        </CollapsingButtons>
+        { body && // May be undefined during decoding
             <Pill>{ getReadableSize(body.byteLength) }</Pill>
-        </> }
+        }
         <PillSelector<ViewableContentType>
             onChange={props.onChangeContentType}
             value={props.selectedContentType}
@@ -120,8 +129,8 @@ export const ReadonlyBodyCardHeader = (props: {
     </>;
 };
 
-export const EditableBodyCardHeader = (props: {
-    body: Buffer,
+export const EditableBodyCardHeader = observer((props: {
+    body: EditableBody,
     onBodyFormatted: (bodyString: string) => void,
 
     title: string,
@@ -143,12 +152,13 @@ export const EditableBodyCardHeader = (props: {
             />
             <FormatButton
                 format={props.selectedContentType}
-                content={body}
+                content={body.decoded}
                 onFormatted={props.onBodyFormatted}
             />
         </CollapsingButtons>
 
-        <Pill>{ getReadableSize(body) }</Pill>
+        <Pill>{ getReadableSize(body.decoded) }</Pill>
+
         <PillSelector<EditableContentType>
             onChange={props.onChangeContentType}
             value={props.selectedContentType}
@@ -160,21 +170,22 @@ export const EditableBodyCardHeader = (props: {
             { props.title }
         </CollapsibleCardHeading>
     </>;
-};
+});
 
 const EncodingErrorMessage = styled(ContentMonoValue)`
     padding: 0;
     margin: 10px 0;
 `;
 
-export const BodyDecodingErrorBanner = (props: {
+export const BodyCodingErrorBanner = (props: {
+    type: 'encoding' | 'decoding'
     direction?: 'left' | 'right',
     error: ErrorLike,
     headers: Headers | RawHeaders
 }) => <CardErrorBanner direction={props.direction}>
     <p>
-        <WarningIcon/> Body decoding failed for encoding '{
-            getHeaderValue(props.headers, 'content-encoding')
+        <WarningIcon/> Body { props.type } failed for encoding '{
+            asHeaderArray(getHeaderValues(props.headers, 'content-encoding'))
         }' due to:
     </p>
     <EncodingErrorMessage>
@@ -184,7 +195,15 @@ export const BodyDecodingErrorBanner = (props: {
         }{ props.error.message || props.error.toString() }
     </EncodingErrorMessage>
     <p>
-        This typically means either the <code>content-encoding</code> header is incorrect or
-        unsupported, or the body was corrupted. The raw content (not decoded) is shown below.
+        This typically means the <code>content-encoding</code> header is incorrect or
+        unsupported{
+            props.type === 'decoding'
+            ? ', or the body was corrupted'
+            : '' // Can't really happen when encoding user input.
+        }. The raw content {
+            props.type === 'decoding'
+            ? '(not decoded) is shown below'
+            : '(not encoded) will be used as-is'
+        }.
     </p>
-</CardErrorBanner>
+</CardErrorBanner>;

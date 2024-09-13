@@ -1,19 +1,20 @@
 import { RulesStore } from "../../../src/model/rules/rules-store";
-import { HtkMockRule } from "../../../src/model/rules/rules";
+import { HtkRule } from "../../../src/model/rules/rules";
 import {
-    HtkMockRuleRoot,
-    HtkMockItem
+    HtkRuleRoot,
+    HtkRuleItem
 } from "../../../src/model/rules/rules-structure";
 
 import { expect } from "../../test-setup";
+import { HttpRule } from "../../../src/model/rules/definitions/http-rule-definitions";
 
-const group = (id: number, ...items: Array<HtkMockItem>) => ({
+const group = (id: number, ...items: Array<HtkRuleItem>) => ({
     id: id.toString(),
     title: id.toString(),
     items
 });
 
-const defaultGroup = (...items: Array<HtkMockItem>) => ({
+const defaultGroup = (...items: Array<HtkRuleItem>) => ({
     id: 'default-group',
     title: "Default rules",
     collapsed: true,
@@ -25,16 +26,16 @@ describe("Rules store", () => {
     let store: RulesStore;
     let [a, b, c, d, e, f] = 'abcdef'
         .split('')
-        .map((char) => ({ id: char }) as HtkMockRule);
+        .map((char) => ({ id: char }) as HtkRule);
 
     beforeEach(() => {
         const proxyStore = {
             serverVersion: '1.0.0',
             dnsServers: []
         };
-        store = new RulesStore({ featureFlags: [] } as any, proxyStore as any, null as any, null as any);
-        store.rules = { id: 'root', items: [] } as any as HtkMockRuleRoot;
-        store.draftRules = { id: 'root', items: [] } as any as HtkMockRuleRoot;
+        store = new RulesStore({ featureFlags: [] } as any, proxyStore as any, null as any);
+        store.rules = { id: 'root', items: [] } as any as HtkRuleRoot;
+        store.draftRules = { id: 'root', items: [] } as any as HtkRuleRoot;
     });
 
     describe("should update all positions for a single save, if the saved rule has moved", () => {
@@ -395,6 +396,18 @@ describe("Rules store", () => {
 
             expect(store.rules.items).to.deep.equal([a]);
             expect(store.draftRules.items).to.deep.equal([a]);
+        });
+
+        it("should update the rule if it exists but missing its priority", () => {
+            store.rules.items = [defaultGroup(a)];
+            store.draftRules.items = [defaultGroup(a)];
+
+            const highPriorityRule = { ...a, priority: 10 } as HttpRule;
+
+            store.ensureRuleExists(highPriorityRule);
+
+            expect(store.rules.items).to.deep.equal([defaultGroup(highPriorityRule)]);
+            expect(store.draftRules.items).to.deep.equal([defaultGroup(highPriorityRule)]);
         });
     });
 });

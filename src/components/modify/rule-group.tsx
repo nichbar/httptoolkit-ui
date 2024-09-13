@@ -15,7 +15,7 @@ import { Icon } from '../../icons';
 import {
     isRuleGroup,
     ItemPath,
-    HtkMockRuleGroup,
+    HtkRuleGroup,
     mapRules,
     flattenRules
 } from '../../model/rules/rules-structure';
@@ -23,8 +23,8 @@ import { getMethodColor } from '../../model/events/categorization';
 
 import { clickOnEnter, noPropagation } from '../component-utils';
 import { TextInput } from '../common/inputs';
-import { DragHandle } from './mock-drag-handle';
-import { IconMenu, IconMenuButton } from './mock-item-menu';
+import { DragHandle } from './rule-drag-handle';
+import { IconMenu, IconMenuButton } from './rule-icon-menu';
 
 const CollapsedItemPlaceholder = styled.div<{
     index: number,
@@ -41,7 +41,7 @@ const CollapsedItemPlaceholder = styled.div<{
 
     background-color: ${p => p.theme.mainBackground};
     border-radius: 4px;
-    box-shadow: 0 2px 10px 0 rgba(0,0,0,0.2);
+    box-shadow: 0 2px 10px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 
     opacity: ${p => (p.activated ? 1 : 0.6) - p.index * 0.2};
     z-index: ${p => 9 - p.index};
@@ -68,9 +68,9 @@ const RuleGroupMenu = (p: {
     onDelete: (event: React.MouseEvent) => void,
 }) => <IconMenu topOffset={-2}>
     <IconMenuButton
-        title='Delete these rules'
-        icon={['far', 'trash-alt']}
-        onClick={p.onDelete}
+        title={p.toggleState ? 'Deactivate these rules' : 'Activate these rules'}
+        icon={['fas', p.toggleState ? 'toggle-on' : 'toggle-off']}
+        onClick={p.onToggleActivation}
     />
     <IconMenuButton
         title='Clone this rule'
@@ -78,9 +78,9 @@ const RuleGroupMenu = (p: {
         onClick={p.onClone}
     />
     <IconMenuButton
-        title={p.toggleState ? 'Deactivate these rules' : 'Activate these rules'}
-        icon={['fas', p.toggleState ? 'toggle-on' : 'toggle-off']}
-        onClick={p.onToggleActivation}
+        title='Delete these rules'
+        icon={['far', 'trash-alt']}
+        onClick={p.onDelete}
     />
 </IconMenu>;
 
@@ -120,7 +120,7 @@ const GroupHeaderContainer = styled.header<{
             color: ${p => p.theme.popColor};
         }
     }
-    &:hover {
+    &:hover, &:focus-within {
         ${DragHandle} {
             opacity: 0.5;
         }
@@ -133,7 +133,7 @@ const GroupHeaderContainer = styled.header<{
             ? 'text-shadow: 0 0 5px rgba(0,0,0,0.2);'
             : css`
                 > ${CollapsedItemPlaceholder} {
-                    box-shadow: 0 2px 20px 0 rgba(0,0,0,0.3);
+                    box-shadow: 0 2px 20px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
                 }
             `
         }
@@ -186,11 +186,11 @@ const extendGroupDraggableStyles = (
     };
 };
 
-const isFullyActiveGroup = (group: HtkMockRuleGroup) =>
+const isFullyActiveGroup = (group: HtkRuleGroup) =>
     flattenRules(group).every(r => r.activated);
 
 export const GroupHeader = observer((p: {
-    group: HtkMockRuleGroup,
+    group: HtkRuleGroup,
     path: ItemPath,
     index: number,
     collapsed: boolean,
@@ -235,6 +235,7 @@ export const GroupHeader = observer((p: {
     >{ (provided, snapshot) => <Observer>{ () =>
         <GroupHeaderContainer
             depth={p.path.length - 1}
+            aria-expanded={!p.collapsed}
             collapsed={p.collapsed}
             editingTitle={isEditing}
 
@@ -246,7 +247,14 @@ export const GroupHeader = observer((p: {
             onKeyPress={clickOnEnter}
             tabIndex={0}
         >
-            <DragHandle {...provided.dragHandleProps} />
+            <DragHandle
+                aria-label={`Drag handle for the '${
+                    isEditing
+                        ? unsavedTitle
+                        : p.group.title
+                }' rule group`}
+                {...provided.dragHandleProps}
+            />
 
             <h2>
                 <Icon
@@ -328,7 +336,7 @@ const GroupTailPlaceholder = styled.div`
     margin-bottom: -20px;
 `;
 
-export const GroupTail = (p: { group: HtkMockRuleGroup, index: number }) =>
+export const GroupTail = (p: { group: HtkRuleGroup, index: number }) =>
     <Draggable
         draggableId={p.group.id + '-tail'}
         index={p.index}

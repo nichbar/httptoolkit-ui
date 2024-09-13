@@ -8,7 +8,7 @@ import { styled } from '../../styles';
 import { saveFile } from '../../util/ui';
 
 import { StreamMessage } from '../../model/events/stream-message';
-import { getSummaryColour } from '../../model/events/categorization';
+import { getSummaryColor } from '../../model/events/categorization';
 
 import { Pill } from '../common/pill';
 import { IconButton } from '../common/icon-button';
@@ -66,13 +66,15 @@ export class StreamMessageListCard extends React.Component<ExpandableCardProps &
             collapsed,
             expanded,
             onCollapseToggled,
-            onExpandToggled
+            onExpandToggled,
+            ariaLabel
         } = this.props;
 
         return <CollapsibleCard
             collapsed={collapsed}
             onCollapseToggled={onCollapseToggled}
             expanded={expanded}
+            ariaLabel={ariaLabel}
         >
             <header>
                 <CollapsingButtons>
@@ -92,7 +94,7 @@ export class StreamMessageListCard extends React.Component<ExpandableCardProps &
                     />
                 </CollapsingButtons>
                 { streamLabel && <Pill
-                    color={getSummaryColour('data')}
+                    color={getSummaryColor('data')}
                     title={streamLabel}
                 >
                     { streamLabel }

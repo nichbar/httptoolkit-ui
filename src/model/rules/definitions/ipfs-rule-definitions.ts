@@ -11,7 +11,7 @@ import {
 } from 'mockttp';
 import * as serializr from 'serializr';
 
-import { byteLength } from '../../../util';
+import { byteLength } from '../../../util/buffer';
 import {
     HttpHandlerLookup
 } from './http-rule-definitions';
@@ -345,7 +345,7 @@ export type IpfsInitialMatcher = InstanceType<typeof IpfsInitialMatcherClasses[n
 type IpfsHandlerClass = typeof IpfsHandlerLookup[keyof typeof IpfsHandlerLookup];
 type IpfsHandler = InstanceType<IpfsHandlerClass>;
 
-export interface IpfsMockRule extends Omit<RequestRuleData, 'matchers'> {
+export interface IpfsRule extends Omit<RequestRuleData, 'matchers'> {
     id: string;
     type: 'ipfs';
     activated: boolean;

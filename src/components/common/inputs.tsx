@@ -9,11 +9,15 @@ export const interactiveMouseoverStyles = css`
     &:not([disabled]) {
         cursor: pointer;
         &:hover {
-            background-image: linear-gradient(transparent, rgba(0,0,0,.05) 40%, rgba(0,0,0,.1));
+            background-image: linear-gradient(transparent, rgba(0,0,0,.1) 40%, rgba(0,0,0,.2));
         }
 
         &:active {
-            background-image: linear-gradient(rgba(0,0,0,.1), rgba(0,0,0,.05) 40%, transparent);
+            background-image: linear-gradient(rgba(0,0,0,.1), rgba(0,0,0,.1) 40%, transparent);
+        }
+
+        &:focus {
+            outline-offset: -1px;
         }
     }
 `;
@@ -111,6 +115,15 @@ const invalidTextCss = css`
     border-color: ${p => p.theme.warningColor};
     background-color: ${p => p.theme.warningBackground};
     color: ${p => p.theme.mainColor};
+
+    &:hover:not(:disabled) {
+        border-color: ${p => p.theme.mainColor};
+        background-color: ${p => p.theme.warningBackground};
+    }
+
+    &::placeholder {
+        color: ${p => p.theme.inputWarningPlaceholder};
+    }
 `;
 
 type TextInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
@@ -123,15 +136,27 @@ export const TextInput = styled.input.attrs((p: { type?: string }) => ({
     font-size: ${p => p.theme.textInputFontSize};
     padding: 5px 10px;
     border-radius: 4px;
-    border: solid 1px ${p => p.theme.containerBorder};
+    border: solid 1px ${p => p.theme.inputBorder};
 
     min-width: 20px; /* Without this, editable headers especially refuse to shrink */
 
-    background-color: ${p => p.theme.textInputBackground};
-    color: ${p => p.theme.textInputColor};
+    background-color: ${p => p.theme.inputBackground};
+    &:hover:not(:disabled) {
+        background-color: ${p => p.theme.inputHoverBackground};
+    }
+
+    &:focus {
+        outline-offset: -1px;
+    }
+
+    color: ${p => p.theme.inputColor};
 
     &:disabled {
         opacity: 0.6;
+    }
+
+    &::placeholder {
+        color: ${p => p.theme.inputPlaceholderColor};
     }
 
     &:invalid {

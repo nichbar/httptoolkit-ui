@@ -18,7 +18,7 @@ import {
     EditorCardContent,
     ReadonlyBodyCardHeader,
     getBodyDownloadFilename,
-    BodyDecodingErrorBanner
+    BodyCodingErrorBanner
 } from '../../editor/body-card-components';
 
 import { LoadingCard } from '../../common/loading-card';
@@ -75,7 +75,8 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
             collapsed,
             expanded,
             onCollapseToggled,
-            onExpandToggled
+            onExpandToggled,
+            ariaLabel
         } = this.props;
 
         const compatibleContentTypes = getCompatibleTypes(
@@ -92,6 +93,7 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
         if (decodedBody) {
             // We have successfully decoded the body content, show it:
             return <CollapsibleCard
+                ariaLabel={ariaLabel}
                 direction={direction}
                 collapsed={collapsed}
                 onCollapseToggled={onCollapseToggled}
@@ -115,7 +117,7 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
                         isPaidUser={isPaidUser}
                     />
                 </header>
-                <EditorCardContent>
+                <EditorCardContent showFullBorder={!expanded}>
                     <ContentViewer
                         contentId={`${message.id}-${direction}`}
                         editorNode={this.props.editorNode}
@@ -141,6 +143,7 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
                 : 'text';
 
             return <CollapsibleCard
+                ariaLabel={ariaLabel}
                 direction={direction}
                 collapsed={collapsed}
                 onCollapseToggled={onCollapseToggled}
@@ -164,13 +167,14 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
                         isPaidUser={isPaidUser}
                     />
                 </header>
-                <BodyDecodingErrorBanner
+                <BodyCodingErrorBanner
+                    type='decoding'
                     direction={this.props.direction}
                     error={error}
                     headers={message.rawHeaders}
                 />
                 { encodedBody &&
-                    <EditorCardContent>
+                    <EditorCardContent showFullBorder={!expanded}>
                         <ContentViewer
                             contentId={`${message.id}-${direction}`}
                             editorNode={this.props.editorNode}
@@ -186,6 +190,7 @@ export class HttpBodyCard extends React.Component<ExpandableCardProps & {
         } else {
             // No body content, but no error yet, show a loading spinner:
             return <LoadingCard
+                ariaLabel={ariaLabel}
                 direction={direction}
                 collapsed={collapsed}
                 onCollapseToggled={onCollapseToggled}

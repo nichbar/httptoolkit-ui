@@ -15,9 +15,9 @@ import { styled, css } from '../../styles';
 import { Icon } from '../../icons';
 import { UnreachableCheck } from '../../util/error';
 
-import { getMethodColor, getSummaryColour } from '../../model/events/categorization';
+import { getMethodColor, getSummaryColor } from '../../model/events/categorization';
 import {
-    HtkMockRule,
+    HtkRule,
     Matcher,
     Handler,
     AvailableHandler,
@@ -30,7 +30,9 @@ import {
     RuleType,
     HandlerStep,
     isFinalHandler,
-    isStepPoweredRule
+    isStepPoweredRule,
+    RulePriority,
+    isHttpBasedRule
 } from '../../model/rules/rules';
 import { ItemPath } from '../../model/rules/rules-structure';
 import {
@@ -53,9 +55,9 @@ import {
 } from './matcher-selection';
 import { HandlerSelector } from './handler-selection';
 import { HandlerConfiguration } from './handler-config';
-import { DragHandle } from './mock-drag-handle';
-import { IconMenu, IconMenuButton } from './mock-item-menu';
-import { RuleTitle, EditableRuleTitle } from './mock-rule-title';
+import { DragHandle } from './rule-drag-handle';
+import { IconMenu, IconMenuButton } from './rule-icon-menu';
+import { RuleTitle, EditableRuleTitle } from './rule-title';
 
 const RowContainer = styled(LittleCard)<{
     deactivated?: boolean,
@@ -91,6 +93,8 @@ const RowContainer = styled(LittleCard)<{
                 ${DragHandle} {
                     opacity: 0.5;
                 }
+
+                box-shadow: 0 2px 15px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha * 1.5});
             }
 
             ${p.deactivated && 'opacity: 0.6;'}
@@ -123,6 +127,7 @@ export const AddRuleRow = styled((p: {
         collapsed={true}
         borderColor='transparent'
         {..._.omit(p, 'onAdd')}
+        role="button"
 
         tabIndex={0}
         depth={0}
@@ -134,7 +139,7 @@ export const AddRuleRow = styled((p: {
     </RowContainer>
 )`
     > svg {
-        margin: 0 5px;
+        margin: 0 10px;
     }
 
     margin-top: 20px;
@@ -143,7 +148,7 @@ export const AddRuleRow = styled((p: {
     background-color: ${p =>
         polished.rgba(p.theme.mainBackground, 0.4)
     };
-    box-shadow: 0 0 4px 0 rgba(0,0,0,0.2);
+    box-shadow: 0 0 4px 0 rgba(0,0,0,${p => p.theme.boxShadowAlpha});
 `;
 
 const MatcherOrHandler = styled.section`
@@ -185,6 +190,14 @@ const DetailsHeader = styled.div`
     margin-bottom: 20px;
 `;
 
+const HighPriorityMarker = styled(Icon).attrs(() => ({
+    icon: ['fas', 'exclamation'],
+    title: 'High-priority rule: this rule overrides all non-high-prority rules'
+}))`
+    margin-right: 10px;
+    align-self: baseline;
+}
+`;
 
 const RuleMenuContainer = styled(IconMenu)`
     background-image: radial-gradient(
@@ -209,33 +222,6 @@ const RuleMenu = (p: {
     onDelete: (event: React.UIEvent) => void,
 }) => <RuleMenuContainer topOffset={7}>
         <IconMenuButton
-            title='Delete this rule'
-            icon={['far', 'trash-alt']}
-            onClick={p.onDelete}
-        />
-        <IconMenuButton
-            title='Clone this rule'
-            icon={['far', 'clone']}
-            onClick={p.onClone}
-        />
-        <IconMenuButton
-            title={p.toggleState ? 'Deactivate this rule' : 'Activate this rule'}
-            icon={['fas', p.toggleState ? 'toggle-on' : 'toggle-off']}
-            onClick={p.onToggleActivation}
-        />
-        <IconMenuButton
-            title='Give this rule a custom name'
-            icon={['fas', 'edit']}
-            disabled={p.isEditingTitle}
-            onClick={p.onSetCustomTitle}
-        />
-        <IconMenuButton
-            title='Revert this rule to the last saved version'
-            icon={['fas', 'undo']}
-            disabled={!p.hasUnsavedChanges || p.isNewRule}
-            onClick={p.onReset}
-        />
-        <IconMenuButton
             icon={['fas',
                 p.hasUnsavedChanges
                     ? 'save'
@@ -249,6 +235,33 @@ const RuleMenu = (p: {
                     ? 'Show rule details'
                 : 'Hide rule details'}
             onClick={p.hasUnsavedChanges ? p.onSave : p.onToggleCollapse}
+        />
+        <IconMenuButton
+            title='Revert this rule to the last saved version'
+            icon={['fas', 'undo']}
+            disabled={!p.hasUnsavedChanges || p.isNewRule}
+            onClick={p.onReset}
+        />
+        <IconMenuButton
+            title='Give this rule a custom name'
+            icon={['fas', 'edit']}
+            disabled={p.isEditingTitle}
+            onClick={p.onSetCustomTitle}
+        />
+        <IconMenuButton
+            title={p.toggleState ? 'Deactivate this rule' : 'Activate this rule'}
+            icon={['fas', p.toggleState ? 'toggle-on' : 'toggle-off']}
+            onClick={p.onToggleActivation}
+        />
+        <IconMenuButton
+            title='Clone this rule'
+            icon={['far', 'clone']}
+            onClick={p.onClone}
+        />
+        <IconMenuButton
+            title='Delete this rule'
+            icon={['far', 'trash-alt']}
+            onClick={p.onDelete}
         />
     </RuleMenuContainer>;
 
@@ -282,7 +295,7 @@ export class RuleRow extends React.Component<{
 
     index: number;
     path: ItemPath;
-    rule: HtkMockRule;
+    rule: HtkRule;
     isNewRule: boolean;
     hasUnsavedChanges: boolean;
     collapsed: boolean;
@@ -322,23 +335,23 @@ export class RuleRow extends React.Component<{
         const ruleType = rule.type;
         const initialMatcher = rule.matchers.length ? rule.matchers[0] : undefined;
 
-        let ruleColour: string;
+        let ruleColor: string;
         if (ruleType === 'http') {
             if (initialMatcher instanceof matchers.MethodMatcher) {
-                ruleColour = getMethodColor(Method[initialMatcher.method]);
+                ruleColor = getMethodColor(Method[initialMatcher.method]);
             } else if (initialMatcher !== undefined) {
-                ruleColour = getMethodColor('unknown');
+                ruleColor = getMethodColor('unknown');
             } else {
-                ruleColour = 'transparent';
+                ruleColor = 'transparent';
             }
         } else if (ruleType === 'websocket') {
-            ruleColour = getSummaryColour('websocket');
+            ruleColor = getSummaryColor('websocket');
         } else if (ruleType === 'ethereum') {
-            ruleColour = getSummaryColour('mutative');
+            ruleColor = getSummaryColor('mutative');
         } else if (ruleType === 'ipfs') {
-            ruleColour = getSummaryColour('html');
+            ruleColor = getSummaryColor('html');
         } else if (ruleType === 'webrtc') {
-            ruleColour = getSummaryColour('rtc-data');
+            ruleColor = getSummaryColor('rtc-data');
         } else {
             throw new UnreachableCheck(ruleType);
         }
@@ -352,7 +365,13 @@ export class RuleRow extends React.Component<{
 
         // We show the summary by default, but if you set a custom title, we only show it when expanded:
         const shouldShowSummary = !collapsed || (!rule.title && !this.titleEditState);
+
         const isEditingTitle = !!this.titleEditState && !collapsed;
+        const shouldShowCustomTitle = rule.title && !isEditingTitle;
+
+        const priorityMarker = isHttpBasedRule(rule) && rule.priority && rule.priority > RulePriority.DEFAULT
+            ? <HighPriorityMarker />
+            : null;
 
         return <Draggable
             draggableId={rule.id}
@@ -361,11 +380,12 @@ export class RuleRow extends React.Component<{
         >{ (provided, snapshot) => <Observer>{ () =>
             <RowContainer
                 {...provided.draggableProps}
-                borderColor={ruleColour}
+                borderColor={ruleColor}
                 ref={(ref: HTMLElement | null) => {
                     provided.innerRef(ref);
                     this.containerRef = ref;
                 }}
+                aria-expanded={!collapsed}
                 collapsed={collapsed}
                 deactivated={!rule.activated}
                 disabled={disabled}
@@ -389,10 +409,19 @@ export class RuleRow extends React.Component<{
                     isEditingTitle={isEditingTitle}
                     onSetCustomTitle={this.startEnteringCustomTitle}
                 />
-                <DragHandle {...provided.dragHandleProps} />
+                <DragHandle
+                    aria-label={`Drag handle for ${
+                        (shouldShowCustomTitle || isEditingTitle) && rule.title
+                            ? `this '${rule.title}'`
+                            : 'this'
+                    } mock rule`}
+                    {...provided.dragHandleProps}
+                />
 
-                { rule.title && !isEditingTitle &&
+
+                { shouldShowCustomTitle &&
                     <RuleTitle>
+                        { priorityMarker }
                         { rule.title }
                     </RuleTitle>
                 }
@@ -413,6 +442,11 @@ export class RuleRow extends React.Component<{
                 <MatcherOrHandler>
                     { shouldShowSummary &&
                         <Summary collapsed={collapsed} title={summarizeMatcher(rule)}>
+                            { !shouldShowCustomTitle &&
+                                // Same condition as the <RuleTitle> block above, because if a
+                                // non-editable title is shown, the marker moves there instead.
+                                priorityMarker
+                            }
                             { summarizeMatcher(rule) }
                         </Summary>
                     }
@@ -673,7 +707,8 @@ class HandlerStepSection extends React.Component<{
             getPro,
             ruleType,
             availableHandlers,
-            handler
+            handler,
+            handlerIndex
         } = this.props;
 
         const shownHandler = this.demoHandler ?? handler;
@@ -688,6 +723,7 @@ class HandlerStepSection extends React.Component<{
                 ruleType={ruleType}
                 onChange={this.updateHandler}
                 availableHandlers={availableHandlers}
+                handlerIndex={handlerIndex}
             />
 
             { isHandlerDemo

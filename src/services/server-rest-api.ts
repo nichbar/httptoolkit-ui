@@ -22,6 +22,10 @@ import {
     ResponseStreamEvent
 } from '../model/send/send-response-model';
 
+interface RestRequestOptions {
+    abortSignal?: AbortSignal
+}
+
 export class RestApiClient {
 
     constructor(
@@ -32,7 +36,8 @@ export class RestApiClient {
         method: string,
         path: string,
         query: Record<string, number | string> = {},
-        body?: object
+        body?: object,
+        options?: RestRequestOptions
     ) {
         const operationName = `${method} ${path}`;
 
@@ -50,9 +55,11 @@ export class RestApiClient {
             },
             body: body
                 ? JSON.stringify(body)
-                : undefined
+                : undefined,
+            signal: options?.abortSignal
         }).catch((e) => {
-            throw new ApiError(`fetch failed with '${e.message ?? e}'`, operationName);
+            const errorMessage = e.message ?? e;
+            throw new ApiError(`fetch failed with '${errorMessage}'`, operationName);
         });
 
         if (!response.ok) {
@@ -65,16 +72,16 @@ export class RestApiClient {
 
             console.error(response.status, errorBody);
 
+            const errorMessage = errorBody?.error?.message ?? '[unknown]';
+            const errorCode = errorBody?.error?.code;
+
             throw new ApiError(
                 `unexpected ${response.status} ${response.statusText} - ${
-                    errorBody?.error?.code
-                        ? `${errorBody?.error?.code} -`
-                        : ''
-                }${
-                    errorBody?.error?.message ?? '[unknown]'
+                    errorCode ? `${errorCode} -` : ''
                 }`,
                 operationName,
-                response.status
+                response.status,
+                { message: errorMessage, code: errorCode }
             );
         }
 
@@ -96,9 +103,10 @@ export class RestApiClient {
         method: string,
         path: string,
         query: Record<string, number | string> = {},
-        body?: object
+        body?: object,
+        options?: RestRequestOptions
     ): Promise<ReadableStream<T>> {
-        const response = await this.apiRequest(method, path, query, body);
+        const response = await this.apiRequest(method, path, query, body, options);
 
         if (!response.body) return emptyStream();
 
@@ -138,10 +146,10 @@ export class RestApiClient {
         return response.interceptors;
     }
 
-    async getDetailedInterceptorMetadata<M extends unknown>(id: string): Promise<M | undefined> {
+    async getDetailedInterceptorMetadata<M extends unknown>(id: string, subId?: string): Promise<M | undefined> {
         const response = await this.apiJsonRequest<{
             interceptorMetadata: M
-        }>('GET', `/interceptors/${id}/metadata`);
+        }>('GET', `/interceptors/${id}/metadata/${subId || ''}`);
 
         return response.interceptorMetadata;
     }
@@ -156,7 +164,8 @@ export class RestApiClient {
 
     async sendRequest(
         requestDefinition: RequestDefinition,
-        requestOptions: RequestOptions
+        requestOptions: RequestOptions,
+        options?: RestRequestOptions
     ) {
         const requestDefinitionData = {
             ...requestDefinition,
@@ -174,10 +183,12 @@ export class RestApiClient {
         }
 
         const responseDataStream = await this.apiNdJsonRequest<ResponseStreamEventData>(
-            'POST', '/client/send', {}, {
+            'POST', '/client/send', {},
+            {
                 request: requestDefinitionData,
                 options: requestOptionsData
-            }
+            },
+            options
         );
 
         const dataStreamReader = responseDataStream.getReader();

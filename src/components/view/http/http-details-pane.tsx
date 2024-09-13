@@ -14,8 +14,9 @@ import { AccountStore } from '../../../model/account/account-store';
 import { ApiExchange } from '../../../model/api/api-interfaces';
 import { buildRuleFromRequest } from '../../../model/rules/rule-creation';
 import { findItem } from '../../../model/rules/rules-structure';
-import { HtkMockRule, getRulePartKey } from '../../../model/rules/rules';
+import { HtkRule, getRulePartKey } from '../../../model/rules/rules';
 import { WebSocketStream } from '../../../model/websockets/websocket-stream';
+import { tagsToErrorType } from '../../../model/http/error-types';
 
 import { PaneOuterContainer, PaneScrollContainer } from '../view-details-pane';
 import { StreamMessageListCard } from '../stream-message-list-card';
@@ -26,10 +27,11 @@ import { HttpApiCard, HttpApiPlaceholderCard } from './http-api-card';
 import { HttpRequestCard } from './http-request-card';
 import { HttpResponseCard } from './http-response-card';
 import { HttpAbortedResponseCard } from './http-aborted-card';
+import { HttpTrailersCard } from './http-trailers-card';
 import { HttpPerformanceCard } from './http-performance-card';
 import { HttpExportCard } from './http-export-card';
 import { SelfSizedEditor } from '../../editor/base-editor';
-import { HttpErrorHeader, tagsToErrorType } from './http-error-header';
+import { HttpErrorHeader } from './http-error-header';
 import { HttpDetailsFooter } from './http-details-footer';
 import { HttpRequestBreakpointHeader, HttpResponseBreakpointHeader } from './http-breakpoint-header';
 import { HttpBreakpointRequestCard } from './http-breakpoint-request-card';
@@ -68,6 +70,7 @@ export class HttpDetailsPane extends React.Component<{
     onDelete: (event: CollectedEvent) => void,
     onScrollToEvent: (event: CollectedEvent) => void,
     onBuildRuleFromExchange: (exchange: HttpExchange) => void,
+    onPrepareToResendRequest?: (exchange: HttpExchange) => void,
 
     // Injected:
     uiStore?: UiStore,
@@ -85,6 +88,7 @@ export class HttpDetailsPane extends React.Component<{
             onDelete,
             onScrollToEvent,
             onBuildRuleFromExchange,
+            onPrepareToResendRequest,
             uiStore,
             accountStore,
             navigate
@@ -131,6 +135,7 @@ export class HttpDetailsPane extends React.Component<{
                 onDelete={onDelete}
                 onScrollToEvent={onScrollToEvent}
                 onBuildRuleFromExchange={onBuildRuleFromExchange}
+                onPrepareToResendRequest={onPrepareToResendRequest}
                 navigate={navigate}
                 isPaidUser={isPaidUser}
             />
@@ -169,13 +174,13 @@ export class HttpDetailsPane extends React.Component<{
             isPaidUser,
             getPro,
             navigate,
-            mockRequest: this.mockRequest,
+            createRuleFromRequest: this.createRuleFromRequest,
             ignoreError: this.ignoreError
         };
 
         const errorType = tagsToErrorType(tags);
 
-        if (errorType) {
+        if (errorType && !exchange.hideErrors) {
             return <HttpErrorHeader type={errorType} {...errorHeaderProps} />;
         } else {
             return null;
@@ -299,6 +304,16 @@ export class HttpDetailsPane extends React.Component<{
             cards.push(this.renderRequestBody(exchange, apiExchange));
         }
 
+        if (exchange.request.rawTrailers?.length) {
+            cards.push(<HttpTrailersCard
+                {...this.cardProps.requestTrailers}
+                type='request'
+                httpVersion={exchange.httpVersion}
+                requestUrl={exchange.request.parsedUrl}
+                trailers={exchange.request.rawTrailers}
+            />);
+        }
+
         if (response === 'aborted') {
             cards.push(<HttpAbortedResponseCard
                 key={this.cardProps.response.key}
@@ -308,6 +323,7 @@ export class HttpDetailsPane extends React.Component<{
         } else if (!!response) {
             cards.push(<HttpResponseCard
                 {...this.cardProps.response}
+                httpVersion={exchange.httpVersion}
                 response={response}
                 requestUrl={exchange.request.parsedUrl}
                 apiExchange={apiExchange}
@@ -317,20 +333,33 @@ export class HttpDetailsPane extends React.Component<{
             if (exchange.hasResponseBody()) {
                 cards.push(this.renderResponseBody(exchange, apiExchange));
             }
-        }
 
-        if (exchange.isWebSocket() && exchange.wasAccepted()) {
-            cards.push(this.renderWebSocketMessages(exchange));
-
-            if (exchange.closeState) {
-                cards.push(<WebSocketCloseCard
-                    {...this.cardProps.webSocketClose}
-                    theme={uiStore!.theme}
-                    closeState={exchange.closeState}
+            if (exchange.isSuccessfulExchange() && exchange.response?.rawTrailers?.length) {
+                cards.push(<HttpTrailersCard
+                    {...this.cardProps.responseTrailers}
+                    type='response'
+                    httpVersion={exchange.httpVersion}
+                    requestUrl={exchange.request.parsedUrl}
+                    trailers={exchange.response.rawTrailers}
                 />);
             }
-        } else {
-            // We only show performance & export for non-websockets, for now:
+        }
+
+        if (exchange.isWebSocket()) {
+            if (exchange.wasAccepted()) {
+                cards.push(this.renderWebSocketMessages(exchange));
+
+                if (exchange.closeState) {
+                    cards.push(<WebSocketCloseCard
+                        {...this.cardProps.webSocketClose}
+                        theme={uiStore!.theme}
+                        closeState={exchange.closeState}
+                    />);
+                }
+            }
+        } else if (!exchange.tags.some(tag => tag.startsWith('client-error:'))) {
+            // We show perf & export only for valid requests, and never for
+            // websockets (at least for now):
 
             // Push all cards below this point to the bottom
             cards.push(<CardDivider key='divider' />);
@@ -356,7 +385,7 @@ export class HttpDetailsPane extends React.Component<{
             ? <HttpBreakpointBodyCard
                 {...this.requestBodyParams()}
                 exchangeId={exchange.id}
-                body={requestBreakpoint.inProgressResult.body.decoded}
+                body={requestBreakpoint.inProgressResult.body}
                 rawHeaders={requestBreakpoint.inProgressResult.rawHeaders}
                 onChange={requestBreakpoint.updateBody}
             />
@@ -376,7 +405,7 @@ export class HttpDetailsPane extends React.Component<{
             ? <HttpBreakpointBodyCard
                 {...this.responseBodyParams()}
                 exchangeId={exchange.id}
-                body={responseBreakpoint.inProgressResult.body.decoded}
+                body={responseBreakpoint.inProgressResult.body}
                 rawHeaders={responseBreakpoint.inProgressResult.rawHeaders}
                 onChange={responseBreakpoint.updateBody}
             />
@@ -434,12 +463,12 @@ export class HttpDetailsPane extends React.Component<{
     }
 
     @action.bound
-    private mockRequest() {
+    private createRuleFromRequest() {
         const { exchange, rulesStore, navigate } = this.props;
 
         const rule = buildRuleFromRequest(rulesStore!, exchange.request);
         rulesStore!.draftRules.items.unshift(rule);
-        navigate(`/mock/${rule.id}`);
+        navigate(`/modify/${rule.id}`);
     }
 
     @computed
@@ -449,7 +478,7 @@ export class HttpDetailsPane extends React.Component<{
         const { matchedRule } = exchange;
         if (!matchedRule) return;
 
-        const currentRuleDraft = findItem(rulesStore!.draftRules, { id: matchedRule.id }) as HtkMockRule | undefined;
+        const currentRuleDraft = findItem(rulesStore!.draftRules, { id: matchedRule.id }) as HtkRule | undefined;
         if (!currentRuleDraft) {
             return { stepTypes: matchedRule.handlerStepTypes, status: 'deleted' } as const;
         }
@@ -471,20 +500,13 @@ export class HttpDetailsPane extends React.Component<{
         const { navigate, exchange } = this.props;
         const { matchedRule } = exchange;
         if (!matchedRule) return;
-        navigate(`/mock/${matchedRule.id}`);
+        navigate(`/modify/${matchedRule.id}`);
     }
 
     @action.bound
     private ignoreError() {
         const { exchange } = this.props;
-
-        // Drop all error tags from this exchange
-        exchange.tags = exchange.tags.filter(t =>
-            !t.startsWith('passthrough-error:') &&
-            !t.startsWith('passthrough-tls-error:') &&
-            !t.startsWith('client-error:') &&
-            !['header-overflow', 'http-2'].includes(t)
-        );
+        exchange.hideErrors = true;
     }
 
 };

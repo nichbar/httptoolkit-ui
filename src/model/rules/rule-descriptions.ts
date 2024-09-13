@@ -3,7 +3,7 @@ import * as _ from 'lodash';
 import { UnreachableCheck } from '../../util/error';
 
 import {
-    HtkMockRule,
+    HtkRule,
     RuleType,
     HandlerClassKey,
     MatcherClassKey
@@ -96,6 +96,7 @@ export function summarizeMatcherClass(key: MatcherClassKey): string {
         case 'callback':
         case 'multipart-form-data':
         case 'raw-body-regexp':
+        case 'regex-url':
             throw new Error(`${key} handler should not be used directly`);
         default:
             throw new UnreachableCheck(key);
@@ -272,7 +273,7 @@ export function summarizeHandlerClass(key: HandlerClassKey): string {
 // Summarize the matchers of an instantiated rule
 // Slight varation on the Mockttp explanation to make the
 // comma positioning more consistent for UX of changing rules
-export function summarizeMatcher(rule: HtkMockRule): string {
+export function summarizeMatcher(rule: HtkRule): string {
     const { matchers } = rule;
 
     if (matchers.length === 0) return 'Never';
@@ -293,7 +294,7 @@ export function summarizeMatcher(rule: HtkMockRule): string {
 }
 
 // Summarize the handler of an instantiated rule
-export function summarizeHandler(rule: HtkMockRule): string {
+export function summarizeHandler(rule: HtkRule): string {
     if ('steps' in rule) {
         const stepExplanations = rule.steps.map(s => s.explain());
         return withFirstCharUppercased(

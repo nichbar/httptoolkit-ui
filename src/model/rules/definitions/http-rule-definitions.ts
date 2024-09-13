@@ -9,7 +9,7 @@ import {
 import * as serializr from 'serializr';
 
 import { MockttpSerializedBuffer } from '../../../types';
-import { byteLength, isSerializedBuffer } from '../../../util';
+import { byteLength, isSerializedBuffer } from '../../../util/buffer';
 
 import { MethodName, MethodNames } from '../../http/methods';
 import { serializeAsTag, serializeBuffer, serializeWithUndefineds } from '../../serialization';
@@ -212,6 +212,14 @@ serializr.createModelSchema(TransformingHandler, {
             updateHeaders: serializeWithUndefineds,
             updateJsonBody: serializeWithUndefineds,
             replaceBody: serializeBuffer,
+            matchReplaceBody: serializr.list(
+                serializr.custom(
+                    ([key, value]: [RegExp, string]) =>
+                        [{ source: key.source, flags: key.flags }, value],
+                    ([key, value]: [{ source: string, flags: string }, string]) =>
+                        [new RegExp(key.source, key.flags), value]
+                )
+            ),
             '*': Object.assign(serializr.raw(), { pattern: { test: () => true } })
         })
     ),
@@ -220,6 +228,14 @@ serializr.createModelSchema(TransformingHandler, {
             updateHeaders: serializeWithUndefineds,
             updateJsonBody: serializeWithUndefineds,
             replaceBody: serializeBuffer,
+            matchReplaceBody: serializr.list(
+                serializr.custom(
+                    ([key, value]: [RegExp, string]) =>
+                        [{ source: key.source, flags: key.flags }, value],
+                    ([key, value]: [{ source: string, flags: string }, string]) =>
+                        [new RegExp(key.source, key.flags), value]
+                )
+            ),
             '*': Object.assign(serializr.raw(), { pattern: { test: () => true } })
         })
     )
@@ -339,7 +355,7 @@ export type HttpInitialMatcher = InstanceType<typeof HttpInitialMatcherClasses[n
 type HttpHandlerClass = typeof HttpHandlerLookup[keyof typeof HttpHandlerLookup];
 type HttpHandler = InstanceType<HttpHandlerClass>;
 
-export interface HttpMockRule extends Omit<RequestRuleData, 'matchers'> {
+export interface HttpRule extends Omit<RequestRuleData, 'matchers'> {
     id: string;
     type: 'http';
     activated: boolean;

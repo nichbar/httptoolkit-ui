@@ -16,14 +16,17 @@ import {
     ContextMenuOption,
     buildNativeContextMenuItems
 } from './context-menu';
+import { tryParseJson } from '../../util';
 
 const VIEW_CARD_KEYS = [
     'api',
 
     'request',
     'requestBody',
+    'requestTrailers',
     'response',
     'responseBody',
+    'responseTrailers',
 
     'webSocketMessages',
     'webSocketClose',
@@ -61,6 +64,9 @@ const isSendRequestCard = (key: SendCardKey): key is 'requestHeaders' | 'request
 const isSentResponseCard = (key: SendCardKey): key is 'responseHeaders' | 'responseBody' =>
     key.startsWith('response');
 
+const SEND_REQUEST_CARD_KEYS = SEND_CARD_KEYS.filter(isSendRequestCard);
+const SENT_RESPONSE_CARD_KEYS = SEND_CARD_KEYS.filter(isSentResponseCard);
+
 const EXPANDABLE_SEND_REQUEST_CARD_KEYS = [
     'requestHeaders',
     'requestBody',
@@ -88,6 +94,11 @@ const SETTINGS_CARD_KEYS =[
 ] as const;
 type SettingsCardKey = typeof SETTINGS_CARD_KEYS[number];
 
+type CustomTheme = Partial<Theme> & {
+    name: string;
+    extends: ThemeName;
+};
+
 export class UiStore {
 
     constructor(
@@ -112,7 +123,7 @@ export class UiStore {
         // closed), but don't get reset when the app starts with stale account data.
         observe(this.accountStore, 'accountDataLastUpdated', () => {
             if (!this.accountStore.isPaidUser) {
-                this.setTheme('light');
+                this.setTheme('automatic');
             }
         });
 
@@ -141,8 +152,27 @@ export class UiStore {
         }
     }
 
+    buildCustomTheme(themeFile: string) {
+        const themeData: Partial<CustomTheme> | undefined = tryParseJson(themeFile);
+        if (!themeData) throw new Error("Could not parse theme JSON");
+
+        if (!themeData.name) throw new Error('Theme must contain a `name` field');
+        if (
+            !themeData.extends ||
+            Themes[themeData.extends as ThemeName] === undefined
+        ) {
+            throw new Error('Theme must contain an `extends` field with a built-in theme name (dark/light/high-contrast)');
+        }
+
+        const baseTheme = Themes[themeData.extends];
+        return {
+            ...baseTheme,
+            ...themeData
+        } as Theme;
+    }
+
     @persist @observable
-    private _themeName: ThemeName | 'automatic' | 'custom' = 'light';
+    private _themeName: ThemeName | 'automatic' | 'custom' = 'automatic';
 
     get themeName() {
         return this._themeName;
@@ -188,8 +218,10 @@ export class UiStore {
 
         'request': { collapsed: false },
         'requestBody': { collapsed: false },
+        'requestTrailers': { collapsed: false },
         'response': { collapsed: false },
         'responseBody': { collapsed: false },
+        'responseTrailers': { collapsed: false },
 
         'webSocketMessages': { collapsed: false },
         'webSocketClose': { collapsed: false },
@@ -209,6 +241,7 @@ export class UiStore {
     get viewCardProps() {
         return _.mapValues(this.viewCardStates, (state, key) => ({
             key,
+            ariaLabel: `${_.startCase(key)} section`,
             expanded: key === this.animatedExpansionCard
                 ?  'starting' as const
                 : key === this.expandedViewCard,
@@ -261,12 +294,12 @@ export class UiStore {
     @computed
     get sendCardProps() {
         return _.mapValues(this.sendCardStates, (state, key) => {
-            const expandedState = key === this.animatedExpansionCard
-                ?  'starting' as const
-                : key === this.expandedSendRequestCard || key === this.expandedSentResponseCard;
+            const expandedState = key === this.expandedSendRequestCard
+                || key === this.expandedSentResponseCard;
 
             return {
                 key,
+                ariaLabel: `${_.startCase(key)} section`,
                 expanded: expandedState,
                 collapsed: state.collapsed && !expandedState,
                 onCollapseToggled: this.toggleSendCardCollapsed.bind(this, key as SendCardKey),
@@ -281,6 +314,21 @@ export class UiStore {
     toggleSendCardCollapsed(key: SendCardKey) {
         const cardState = this.sendCardStates[key];
         cardState.collapsed = !cardState.collapsed;
+
+        const siblingCards: SendCardKey[] = isSendRequestCard(key)
+            ? SEND_REQUEST_CARD_KEYS
+            : SENT_RESPONSE_CARD_KEYS;
+
+        // If you collapse all cards, pop open an alternative, just because it looks a bit weird
+        // if you don't, and it makes it easier to quickly switch like an accordion in some cases.
+        if (siblingCards.every((k) => this.sendCardStates[k].collapsed)) {
+            const keyIndex = siblingCards.indexOf(key);
+            const bestAlternativeCard = (keyIndex === siblingCards.length - 1)
+                ? siblingCards[keyIndex - 1] // For last card, look back one
+                : siblingCards[keyIndex + 1] // Otherwise, look at next card
+
+            this.toggleSendCardCollapsed(bestAlternativeCard);
+        }
 
         if (isSendRequestCard(key)) {
             this.expandedSendRequestCard = undefined;
@@ -305,11 +353,8 @@ export class UiStore {
             this.sendCardStates[key].collapsed = false;
             this[expandedCardField] = key as any; // We ensured key matches the field already above
 
-            // Briefly set animatedExpansionCard, to trigger animation for this expansion:
-            this.animatedExpansionCard = key;
-            requestAnimationFrame(action(() => {
-                this.animatedExpansionCard = undefined;
-            }));
+            // We don't bother with animatedExpansionCard - not required for Send (we just
+            // animate top-line margin, not expanded card padding)
         }
     }
 
@@ -326,6 +371,7 @@ export class UiStore {
     get settingsCardProps() {
         return _.mapValues(this.settingsCardStates, (state, key) => ({
             key,
+            ariaLabel: `${_.startCase(key)} section`,
             collapsed: state.collapsed,
             onCollapseToggled: this.toggleSettingsCardCollapsed.bind(this, key as SettingsCardKey)
         }));

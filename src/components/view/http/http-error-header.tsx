@@ -2,7 +2,6 @@ import * as React from 'react';
 import * as semver from 'semver';
 
 import { WarningIcon } from '../../../icons';
-import { logError } from '../../../errors';
 
 import {
     desktopVersion,
@@ -11,6 +10,18 @@ import {
 } from '../../../services/service-versions';
 
 import { unreachableCheck } from '../../../util/error';
+
+import {
+    ErrorType,
+    isClientBug,
+    isInitialRequestError,
+    isMockable,
+    isWhitelistable,
+    wasNotForwarded,
+    wasResponseIssue,
+    wasTimeout
+} from '../../../model/http/error-types';
+
 import { clickOnEnter } from '../../component-utils';
 import {
     HeaderCard,
@@ -18,171 +29,12 @@ import {
     HeaderButton
 } from '../header-card';
 
-type ErrorType =
-    | 'untrusted'
-    | 'expired'
-    | 'not-yet-valid'
-    | 'wrong-host'
-    | 'tls-error'
-    | 'host-not-found'
-    | 'host-unreachable'
-    | 'dns-error'
-    | 'connection-refused'
-    | 'connection-reset'
-    | 'client-abort'
-    | 'server-timeout'
-    | 'client-timeout'
-    | 'invalid-http-version'
-    | 'invalid-method'
-    | 'client-unparseable-url'
-    | 'client-unparseable'
-    | 'server-unparseable'
-    | 'header-overflow'
-    | 'invalid-headers'
-    | 'unknown';
-
-export function tagsToErrorType(tags: string[]): ErrorType | undefined {
-    if (
-        tags.includes("passthrough-error:SELF_SIGNED_CERT_IN_CHAIN") ||
-        tags.includes("passthrough-error:DEPTH_ZERO_SELF_SIGNED_CERT") ||
-        tags.includes("passthrough-error:UNABLE_TO_VERIFY_LEAF_SIGNATURE") ||
-        tags.includes("passthrough-error:UNABLE_TO_GET_ISSUER_CERT_LOCALLY")
-    ) {
-        return 'untrusted';
-    }
-
-    if (tags.includes("passthrough-error:CERT_HAS_EXPIRED")) return 'expired';
-    if (tags.includes("passthrough-error:CERT_NOT_YET_VALID")) return 'not-yet-valid';
-    if (tags.includes("passthrough-error:ERR_TLS_CERT_ALTNAME_INVALID")) return 'wrong-host';
-
-    if (
-        tags.filter(t => t.startsWith("passthrough-tls-error:")).length > 0 ||
-        tags.includes("passthrough-error:EPROTO") ||
-        tags.includes("passthrough-error:ERR_SSL_WRONG_VERSION_NUMBER") ||
-        tags.includes("passthrough-error:ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC") ||
-        tags.includes("passthrough-error:ERR_SSL_CIPHER_OPERATION_FAILED") ||
-        tags.includes("passthrough-error:ERR_SSL_BAD_RECORD_TYPE") ||
-        tags.includes("passthrough-error:ERR_SSL_INTERNAL_ERROR")
-    ) {
-        return 'tls-error';
-    }
-
-    if (tags.includes("passthrough-error:ENOTFOUND")) return 'host-not-found';
-    if (
-        tags.includes("passthrough-error:EHOSTUNREACH") || // No known route to this host
-        tags.includes("passthrough-error:ENETUNREACH") // Whole network is unreachable
-    ) return 'host-unreachable';
-    if (tags.includes("passthrough-error:EAI_AGAIN")) return 'dns-error';
-    if (tags.includes("passthrough-error:ECONNREFUSED")) return 'connection-refused';
-    if (tags.includes("passthrough-error:ECONNRESET")) return 'connection-reset';
-    if (tags.includes("passthrough-error:ETIMEDOUT")) return 'server-timeout';
-    if (
-        tags.includes("passthrough-error:HPE_INVALID_CONSTANT") ||
-        tags.includes("passthrough-error:ERR_INVALID_HTTP_TOKEN") ||
-        tags.includes("passthrough-error:ERR_HTTP_INVALID_STATUS_CODE") ||
-        tags.includes("passthrough-error:ERR_INVALID_CHAR")
-    ) {
-        return 'server-unparseable';
-    }
-
-    if (tags.includes("http-2") || tags.includes("client-error:HPE_INVALID_VERSION")) {
-        return 'invalid-http-version';
-    }
-
-    if (tags.includes("client-error:HPE_INVALID_METHOD")) return 'invalid-method'; // QWE / HTTP/1.1
-    if (tags.includes("client-error:HPE_INVALID_URL")) return 'client-unparseable-url'; // http://<unicode>
-    if (
-        tags.includes("client-error:HPE_INVALID_CONSTANT") || // GET / HTTQ <- incorrect constant char
-        tags.includes("client-error:HPE_INVALID_EOF_STATE") // Unexpected 0-length packet in parser
-    ) return 'client-unparseable'; // ABC/1.1
-    if (tags.includes("client-error:HPE_HEADER_OVERFLOW")) return 'header-overflow'; // More than ~80KB of headers
-    if (
-        tags.includes("client-error:HPE_INVALID_CONTENT_LENGTH") ||
-        tags.includes("client-error:HPE_INVALID_TRANSFER_ENCODING") ||
-        tags.includes("client-error:HPE_INVALID_HEADER_TOKEN") || // Invalid received (req or res) headers
-        tags.includes("client-error:HPE_UNEXPECTED_CONTENT_LENGTH") || // T-E with C-L
-        tags.includes("passthrough-error:HPE_INVALID_HEADER_TOKEN") // Invalid headers upstream, e.g. after breakpoint
-    ) return 'invalid-headers';
-
-    if (tags.includes("client-error:ERR_HTTP_REQUEST_TIMEOUT")) return 'client-timeout';
-    if (
-        tags.includes("client-error:ECONNABORTED") ||
-        tags.includes("client-error:EPIPE")
-    ) return 'client-abort';
-
-    if (
-        tags.filter(t => t.startsWith("passthrough-error:")).length > 0 ||
-        tags.filter(t => t.startsWith("client-error:")).length > 0
-    ) {
-        logError(`Unrecognized error tag ${JSON.stringify(tags)}`);
-        return 'unknown';
-    }
-}
-
-function typeCheck<T extends string>(types: readonly T[]) {
-    return (type: string): type is T => types.includes(type as T);
-}
-
-const isInitialRequestError = typeCheck([
-    'invalid-http-version',
-    'invalid-method',
-    'client-unparseable',
-    'client-unparseable-url',
-    'header-overflow',
-    'invalid-headers'
-]);
-
-const isClientBug = typeCheck([
-    'client-unparseable',
-    'client-unparseable-url',
-    'invalid-headers'
-]);
-
-const wasNotForwarded = typeCheck([
-    'untrusted',
-    'expired',
-    'not-yet-valid',
-    'wrong-host',
-    'tls-error',
-    'host-not-found',
-    'host-unreachable',
-    'dns-error',
-    'connection-refused'
-]);
-
-const wasResponseIssue = typeCheck([
-    'server-unparseable',
-    'connection-reset'
-]);
-
-const wasTimeout = typeCheck([
-    'client-timeout',
-    'server-timeout'
-]);
-
-const isWhitelistable = typeCheck([
-    'untrusted',
-    'expired',
-    'not-yet-valid',
-    'wrong-host',
-    'tls-error'
-]);
-
-const isMockable = typeCheck([
-    'host-not-found',
-    'host-unreachable',
-    'dns-error',
-    'connection-refused',
-    'connection-reset',
-    'server-timeout'
-]);
-
 export const HttpErrorHeader = (p: {
     isPaidUser: boolean,
     type: ErrorType,
     getPro: (source: string) => void,
     navigate: (path: string) => void,
-    mockRequest: () => void,
+    createRuleFromRequest: () => void,
     ignoreError: () => void
 }) => {
     const advancedHeaderOverflowSupported =
@@ -202,7 +54,7 @@ export const HttpErrorHeader = (p: {
                     ? <strong>This request was not forwarded successfully</strong>
                 : // Forwarded but failed later, or unknown:
                     <strong>This exchange was not completed successfully</strong>
-            }
+            } <WarningIcon />
         </HeaderText>
 
         <HeaderText>
@@ -236,15 +88,15 @@ export const HttpErrorHeader = (p: {
                         : p.type === 'untrusted'
                             ? 'has an untrusted HTTPS certificate'
                         : p.type === 'tls-error'
-                            ? 'failed to complete a TLS handshake'
+                            ? 'could not complete a TLS handshake'
                         : p.type === 'host-unreachable'
                             ? 'was not reachable on your network connection'
                         : p.type === 'host-not-found' || p.type === 'dns-error'
-                            ? 'hostname could be not found'
+                            ? 'hostname could not be found'
                         : p.type === 'connection-refused'
                             ? 'refused the connection'
                         : unreachableCheck(p.type)
-                    }, so HTTP Toolkit did not forward the request.
+                    }, so HTTP Toolkit didn't forward the request.
                 </>
             : wasTimeout(p.type)
                 ? <>
@@ -283,15 +135,15 @@ export const HttpErrorHeader = (p: {
         { p.type === 'tls-error'
             ? <>
                 <HeaderText>
-                    This could be caused by the server not supporting modern cipher
-                    standards or TLS versions, requiring a client certificate that hasn't
-                    been provided, or other TLS configuration issues.
+                    This could be caused by the server not supporting modern ciphers or
+                    TLS versions, expecting a client certificate that wasn't provided,
+                    or TLS configuration issues in either the server or HTTP Toolkit.
                 </HeaderText>
                 <HeaderText>
                     { p.isPaidUser
                         ? <>
                             From the Settings page you can configure client certificates, or
-                            whitelist this host to relax HTTPS requirements and allow
+                            whitelist this host to relax security requirements and allow
                             self-signed certificates, which may resolve some TLS issues.
                         </>
                         : <>
@@ -309,8 +161,8 @@ export const HttpErrorHeader = (p: {
                     could be an issue with your DNS or network configuration.
                 </HeaderText>
                 <HeaderText>
-                    You can define mock responses for requests like this from the
-                    Mock page, to return fake data even for servers and hostnames
+                    You can define rules to handle requests like this from the
+                    Modify page, to return fake data even for servers and hostnames
                     that don't exist.
                 </HeaderText>
             </>
@@ -321,8 +173,8 @@ export const HttpErrorHeader = (p: {
                     host's DNS records.
                 </HeaderText>
                 <HeaderText>
-                    You can define mock responses for requests like this from the
-                    Mock page, to return fake data even for servers and hostnames
+                    You can define rules to handle requests like this from the
+                    Modify page, to return fake data even for servers and hostnames
                     that aren't accessible.
                 </HeaderText>
             </>
@@ -334,8 +186,8 @@ export const HttpErrorHeader = (p: {
                     connectivity, and may just be a temporary issue.
                 </HeaderText>
                 <HeaderText>
-                    You can define mock responses for requests like this from the
-                    Mock page, to return fake data even for servers and hostnames
+                    You can define rules to handle requests like this from the
+                    Modify page, to return fake data even for servers and hostnames
                     that don't exist or aren't accessible.
                 </HeaderText>
             </>
@@ -359,13 +211,13 @@ export const HttpErrorHeader = (p: {
             ? <HeaderText>
                 This typically means the server isn't running on the port you're using, though
                 it is possible this is an intermittent connection issue. You can either try
-                again, or mock requests like this to avoid sending them upstream at all.
+                again, or create a rule for requests like this to avoid sending them upstream at all.
             </HeaderText>
         : p.type === 'connection-reset'
             ? <HeaderText>
                 This could be due to a connection issue, or an issue with the server.
                 This may be an intermittent issue that will be solved by retrying the request, or
-                you can mock requests like this to avoid sending them upstream at all.
+                you can create a rule for requests like this to avoid sending them upstream at all.
             </HeaderText>
         : p.type === 'client-abort'
             ? <HeaderText>
@@ -383,8 +235,8 @@ export const HttpErrorHeader = (p: {
             ? <HeaderText>
                 This could be due to connection issues, problems within the server, or issues
                 with handling this request specifically. This might be resolved by retrying
-                the request, or you can mock requests like this to avoid sending them upstream
-                at all.
+                the request, or you can create a rule for requests like this to avoid sending
+                them upstream at all.
             </HeaderText>
         : isClientBug(p.type)
             ? <HeaderText>
@@ -458,8 +310,8 @@ export const HttpErrorHeader = (p: {
         </HeaderButton>
 
         { isMockable(p.type)
-            ? <HeaderButton onClick={p.mockRequest} onKeyPress={clickOnEnter}>
-                Mock requests like this
+            ? <HeaderButton onClick={p.createRuleFromRequest} onKeyPress={clickOnEnter}>
+                Create a rule
             </HeaderButton>
         : isWhitelistable(p.type)
             ? (p.isPaidUser

@@ -6,17 +6,16 @@ jobs:
   build:
     name: Build & test
     runs-on: ubuntu-latest
-    container: httptoolkit/act-build-base:v3.0.0
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
 
       # Install Node
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 20.8.0
           cache: 'npm'
-
-      - run: npm install -g npm@8.5.5
 
       # Install & build & test:
       - run: npm ci
@@ -36,73 +35,69 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_DSN: ${{ vars.SENTRY_DSN }}
           SENTRY_ORG: http-toolkit
           SENTRY_PROJECT: httptoolkit-ui
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          REPORT_URI: ${{ vars.REPORT_URI }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # To pull server without rate limit issues in CI
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/*
           if-no-files-found: error
 
-  publish-netlify:
-    name: Deploy ${{ (github.ref == 'refs/heads/main' && 'to Netlify production') || 'Netlify preview' }}
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    container: httptoolkit/act-build-base
-    needs: build
+  # We build in parallel on Windows too, purely to check the build process is cross-compatible for contributors.
+  test-windows-build:
+    name: Test build on Windows
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
         with:
-          name: dist
-          path: dist
+          fetch-depth: 100
 
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v1.1
+      # Install Node
+      - uses: actions/setup-node@v4
         with:
-          publish-dir: './dist'
-          production-branch: main # Main goes to prod, others do deploy previews
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: GHA Deploy - ${{ github.event.head_commit.message }}
-          enable-commit-status: true
-          enable-pull-request-comment: false
-          enable-commit-comment: false
-          netlify-config-path: ./netlify.toml
-          alias: ${{ github.sha }}
+          node-version: 20.8.0
+          cache: 'npm'
+
+      # Install & unit test & build
+      - run: npm ci
+
+      - run: npm run test:unit
+
+      # Build the app:
+      - name: Test a production build
+        run: npm run build
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        timeout-minutes: 1
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # To pull server without rate limit issues in CI
 
   publish-docker:
     name: Build & publish container to Docker Hub
     if: github.event_name == 'push' && !startsWith(github.ref, 'refs/heads/dependabot/')
     runs-on: ubuntu-latest
-    container: httptoolkit/act-build-base
-    needs: build
+    needs: [build, test-windows-build]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
 
-      - uses: docker/setup-buildx-action@v2
+      - uses: docker/setup-buildx-action@v3
+
       - name: Login to DockerHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           images: httptoolkit/ui
@@ -112,7 +107,7 @@ jobs:
             type=sha
 
       - name: Build and publish to Docker Hub
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: ${{ github.event_name == 'push' }}
@@ -123,13 +118,21 @@ jobs:
     name: Deploy to Scaleway
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    container: httptoolkit/act-build-base
     needs: publish-docker
     steps:
       - name: Redeploy container
-        uses: thibaultchazal/scaleway-serverless-container-deploy-action@0d290edda0c3359e51442bd8bf730eafef4e290f
+        uses: httptoolkit/scaleway-serverless-container-deploy-action@v1
         with:
           container_id: ${{ vars.SCW_API_CONTAINER_ID }}
+          region: ${{ vars.SCW_API_CONTAINER_REGION }}
+          secret_key: ${{ secrets.SCW_SECRET_KEY }}
+          registry_image_url: "registry.hub.docker.com/httptoolkit/ui:prod"
+
+      - name: Redeploy failover container
+        uses: httptoolkit/scaleway-serverless-container-deploy-action@v1
+        with:
+          container_id: ${{ vars.SCW_FAILOVER_API_CONTAINER_ID }}
+          region: ${{ vars.SCW_FAILOVER_API_CONTAINER_REGION }}
           secret_key: ${{ secrets.SCW_SECRET_KEY }}
           registry_image_url: "registry.hub.docker.com/httptoolkit/ui:prod"
 

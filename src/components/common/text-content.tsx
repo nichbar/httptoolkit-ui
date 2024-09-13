@@ -9,6 +9,7 @@ import { fromMarkdown } from '../../model/ui/markdown';
 
 export const ContentLabel = styled.h2`
     text-transform: uppercase;
+    font-family: ${p => p.theme.titleTextFamily};
     opacity: ${p => p.theme.lowlightTextOpacity};
 
     display: inline-block;
@@ -65,8 +66,8 @@ export const BlankContentPlaceholder = styled.div`
 // The __html format is intended to enforce this - those objects
 // should only be created during sanitization.
 export const ExternalContent = (p:  React.HTMLAttributes<HTMLDivElement> & {
-    content: Html
-}) => <Content {..._.omit(p, 'content')} dangerouslySetInnerHTML={p.content} />
+    htmlContent: Html
+}) => <Content {..._.omit(p, 'htmlContent')} dangerouslySetInnerHTML={p.htmlContent} />
 
 // Format blocks of readable text/docs/etc.
 export const Content = styled.div`
@@ -144,11 +145,15 @@ export const Content = styled.div`
     }
 `;
 
-export const Markdown = (p: { content: string | undefined }) =>
+export const Markdown = (p: {
+    content: string | undefined,
+    linkify?: boolean
+}) =>
     p.content ?
-        <ExternalContent content={fromMarkdown(
+        <ExternalContent htmlContent={fromMarkdown(
             p.content
                 .replace(/:suggestion:/g, suggestionIconHtml)
-                .replace(/:warning:/g, warningIconHtml)
+                .replace(/:warning:/g, warningIconHtml),
+            { linkify: p.linkify }
         )} />
     : null;
